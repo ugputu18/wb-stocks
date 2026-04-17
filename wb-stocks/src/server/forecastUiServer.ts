@@ -317,6 +317,8 @@ function parseQuery(url: URL): ForecastReportFilter & {
   const horizonDays = horizonRaw ? Number(horizonRaw) : NaN;
   const warehouseKey = url.searchParams.get("warehouseKey");
   const q = url.searchParams.get("q");
+  const techSizeRaw = url.searchParams.get("techSize");
+  const techSize = techSizeRaw && techSizeRaw.trim() !== "" ? techSizeRaw.trim() : null;
   const riskStockout = parseRiskStockout(url.searchParams.get("riskStockout"));
   const replenishmentTargetCoverageDays = parseTargetCoverageDays(url);
   const replenishmentMode = parseReplenishmentMode(url);
@@ -330,6 +332,7 @@ function parseQuery(url: URL): ForecastReportFilter & {
     horizonDays,
     warehouseKey: warehouseKey?.trim() || null,
     q: q?.trim() || null,
+    techSize,
     riskStockout,
     replenishmentTargetCoverageDays,
     replenishmentMode,
@@ -450,6 +453,7 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
         const filter: ForecastReportFilter = {
           warehouseKey: q.warehouseKey,
           q: q.q,
+          techSize: q.techSize,
           riskStockout: q.riskStockout,
           replenishmentTargetCoverageDays: q.replenishmentTargetCoverageDays,
           replenishmentMode: q.replenishmentMode,
@@ -496,6 +500,7 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
         const filter: ForecastReportFilter = {
           warehouseKey: q.warehouseKey,
           q: q.q,
+          techSize: q.techSize,
           riskStockout: q.riskStockout,
           replenishmentTargetCoverageDays: q.replenishmentTargetCoverageDays,
           replenishmentMode: q.replenishmentMode,
@@ -548,6 +553,7 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
         const supplierFilter: ForecastReportFilter = {
           warehouseKey: q.warehouseKey,
           q: q.q,
+          techSize: q.techSize,
           ownWarehouseCode: q.ownWarehouseCode,
           replenishmentMode: q.replenishmentMode,
           replenishmentTargetCoverageDays: tc,
@@ -585,6 +591,7 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
         const filter: ForecastReportFilter = {
           warehouseKey: q.warehouseKey,
           q: q.q,
+          techSize: q.techSize,
           riskStockout: q.riskStockout,
           replenishmentTargetCoverageDays: q.replenishmentTargetCoverageDays,
           replenishmentMode: q.replenishmentMode,
@@ -643,6 +650,7 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
         const supplierFilter: ForecastReportFilter = {
           warehouseKey: q.warehouseKey,
           q: q.q,
+          techSize: q.techSize,
           ownWarehouseCode: q.ownWarehouseCode,
           replenishmentMode: q.replenishmentMode,
           replenishmentTargetCoverageDays: tc,

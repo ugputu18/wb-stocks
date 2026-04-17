@@ -86,6 +86,7 @@
           <th title="max(0, спрос×дни − WB∑ по сети)">На WB</th>
           <th title="Та же формула, что в блоке закупки">У пр-ля</th>
           <th title="MIN(stockout_date) по складам">OOS (WB)</th>
+          <th class="th-drill-wb-total" scope="col" title="Быстрый переход к строкам по складам для этого SKU">Склады</th>
         </tr>`;
 
   const THEAD_WAREHOUSES = `<tr>
@@ -123,8 +124,8 @@
         "Колонка «На WB» — довоз с учётом network-запаса; закупка у производителя — в таблице ниже.";
     } else {
       el.innerHTML =
-        "Режим по умолчанию: <strong>WB в целом</strong> — одна строка на SKU по сети; риск и дни запаса — по агрегату сети (read-side GROUP BY). " +
-        "Сортировка по умолчанию: <strong>daysOfStockWB</strong> по возрастанию (хуже запас — выше), затем <strong>forecastDailyDemandTotal</strong> по убыванию. «На WB» и «У пр-ля» — как в supplier-таблице ниже.";
+        "Режим по умолчанию: <strong>WB в целом</strong> — одна строка на SKU по сети; клик по <strong>vendor / nm_id / размеру</strong> или кнопка <strong>«По складам»</strong> переключает вид на склады с фильтром по SKU (<code>q</code> + <code>techSize</code>). " +
+        "Сортировка: <strong>daysOfStockWB</strong> ↑, затем <strong>forecastDailyDemandTotal</strong> ↓.";
     }
   }
 
@@ -156,6 +157,9 @@
     });
     if (warehouseKey) p.set("warehouseKey", warehouseKey);
     if (q) p.set("q", q);
+    const tsf = $("techSizeFilter");
+    const ts = tsf && tsf.value.trim();
+    if (ts) p.set("techSize", ts);
     if (ownWarehouseCode) p.set("ownWarehouseCode", ownWarehouseCode);
     return p;
   }
@@ -193,8 +197,22 @@
     });
     if (warehouseKey) p.set("warehouseKey", warehouseKey);
     if (q) p.set("q", q);
+    const tsf = $("techSizeFilter");
+    const ts = tsf && tsf.value.trim();
+    if (ts) p.set("techSize", ts);
     if (ownWarehouseCode) p.set("ownWarehouseCode", ownWarehouseCode);
     return p;
+  }
+
+  function drillDownToWarehousesFromWbTotal(nmId, techSize) {
+    $("viewMode").value = "wbWarehouses";
+    $("q").value = String(nmId);
+    const tsf = $("techSizeFilter");
+    if (tsf) tsf.value = techSize != null ? String(techSize) : "";
+    setStatus("Переключение на склады WB по выбранному SKU…");
+    loadWarehouses()
+      .then(loadTable)
+      .catch((e) => setStatus(e && e.message ? e.message : String(e)));
   }
 
   function setStatus(msg) {
@@ -449,11 +467,12 @@
         .map((row, idx) => {
           const inv = row.inventoryLevels;
           const rep = row.replenishment;
-          return `<tr class="tr-row tr-risk-${row.risk || "ok"}" data-idx="${idx}" tabindex="0" title="Клик — детали по SKU (сеть WB)">
+          const tsEnc = encodeURIComponent(String(row.techSize ?? ""));
+          return `<tr class="tr-row tr-risk-${row.risk || "ok"}" data-idx="${idx}" data-drill-nm="${row.nmId}" data-drill-ts="${tsEnc}" tabindex="0" title="Строка: детали; vendor / nm / размер / «По складам» — разбивка по складам">
           <td class="risk-cell risk-cell-wb-total"><span class="badge badge-wb-total ${badgeClass(row.risk)}">${escapeHtml(riskLabelWbTotal(row.risk))}</span></td>
-          <td class="col-vendor-wb-total">${escapeHtml(String(row.vendorCode ?? ""))}</td>
-          <td>${escapeHtml(String(row.nmId ?? ""))}</td>
-          <td>${escapeHtml(String(row.techSize ?? ""))}</td>
+          <td class="col-vendor-wb-total"><button type="button" class="wb-drill-link js-wb-drill" title="Показать строки по складам WB для этого SKU">${escapeHtml(String(row.vendorCode ?? ""))}</button></td>
+          <td class="td-drill-nm"><button type="button" class="wb-drill-link tabular js-wb-drill" title="Показать строки по складам WB для этого SKU">${escapeHtml(String(row.nmId ?? ""))}</button></td>
+          <td class="td-drill-size"><button type="button" class="wb-drill-link js-wb-drill" title="Показать строки по складам WB для этого SKU">${escapeHtml(String(row.techSize ?? ""))}</button></td>
           <td>${formatInt(row.wbAvailableTotal)}</td>
           <td>${formatInt(row.ownStock)}</td>
           <td>${formatInt(inv ? inv.systemAvailable : null)}</td>
@@ -462,6 +481,7 @@
           <td>${formatInt(rep ? rep.recommendedToWB : null)}</td>
           <td>${formatInt(row.recommendedFromSupplier)}</td>
           <td>${escapeHtml(String(row.stockoutDateWB ?? ""))}</td>
+          <td class="td-drill-action"><button type="button" class="btn-drill-warehouses js-wb-drill" title="Показать этот SKU по складам WB">По складам</button></td>
         </tr>`;
         })
         .join("");
@@ -703,6 +723,20 @@
 
   function wireTableClicks() {
     $("tbody").addEventListener("click", (ev) => {
+      const drill = ev.target.closest(".js-wb-drill");
+      if (drill) {
+        ev.preventDefault();
+        const tr = drill.closest("tr[data-drill-nm]");
+        if (!tr) return;
+        const rawNm = tr.getAttribute("data-drill-nm");
+        const tsEnc = tr.getAttribute("data-drill-ts") || "";
+        const nmId = rawNm != null ? Number(rawNm) : NaN;
+        const techSize =
+          tsEnc.length > 0 ? decodeURIComponent(tsEnc) : "";
+        if (!Number.isFinite(nmId)) return;
+        drillDownToWarehousesFromWbTotal(nmId, techSize);
+        return;
+      }
       const tr = ev.target.closest("tr[data-idx]");
       if (!tr) return;
       selectRow(parseInt(tr.dataset.idx, 10));
@@ -757,6 +791,11 @@
   });
 
   wireTableClicks();
+
+  $("q").addEventListener("input", () => {
+    const tsf = $("techSizeFilter");
+    if (tsf) tsf.value = "";
+  });
 
   loadWarehouses()
     .then(loadTable)

@@ -79,6 +79,7 @@
       <label class="grow">
         Поиск (vendor / nm_id)
         <input type="search" id="q" placeholder="например SKU-1 или 12345" autocomplete="off" />
+        <input type="hidden" id="techSizeFilter" value="" />
       </label>
     </div>
     <div class="row">
@@ -105,8 +106,8 @@
     <h2>Строки прогноза</h2>
     <p class="muted table-hint" id="mainTableHint">
       <span id="mainTableHintText">
-        Режим по умолчанию: <strong>WB в целом</strong> — первая колонка: бакет риска (сеть), затем vendor; сортировка: daysOfStockWB по возрастанию, затем forecastDailyDemandTotal по убыванию.
-        «На WB» и «У пр-ля» — read-side; детали закупки — в таблице ниже.
+        Режим по умолчанию: <strong>WB в целом</strong> — клик по vendor / nm_id / размеру или «По складам» открывает разбивку по складам с фильтром по SKU (query <code>q</code> + <code>techSize</code>).
+        Сортировка: daysOfStockWB по возрастанию, затем forecastDailyDemandTotal по убыванию.
       </span>
     </p>
     <div class="table-wrap">
@@ -125,6 +126,7 @@
             <th title="max(0, спрос×дни − WB∑ по сети)">На WB</th>
             <th title="Та же формула, что в блоке закупки">У пр-ля</th>
             <th title="MIN(stockout_date) по складам">OOS (WB)</th>
+            <th class="th-drill-wb-total" scope="col" title="Быстрый переход к строкам по складам для этого SKU">Склады</th>
           </tr>
         </thead>
         <tbody id="tbody"></tbody>

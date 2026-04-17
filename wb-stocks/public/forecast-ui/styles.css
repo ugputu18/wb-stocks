@@ -269,6 +269,62 @@ table.grid-wb-total td.col-vendor-wb-total {
   text-overflow: ellipsis;
 }
 
+button.wb-drill-link {
+  display: inline;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: inherit;
+  color: #8ab4ff;
+  cursor: pointer;
+  text-align: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgba(138, 180, 255, 0.45);
+  text-underline-offset: 2px;
+}
+
+button.wb-drill-link:hover {
+  color: #c4d8ff;
+  text-decoration-color: rgba(196, 216, 255, 0.75);
+}
+
+button.wb-drill-link.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+table.grid-wb-total td.td-drill-nm,
+table.grid-wb-total td.td-drill-size {
+  padding-left: 0.35rem;
+}
+
+table.grid-wb-total td.td-drill-action {
+  padding: 0.25rem 0.4rem;
+  vertical-align: middle;
+}
+
+table.grid-wb-total .btn-drill-warehouses {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.5rem;
+  white-space: nowrap;
+  border-radius: 6px;
+  border: 1px solid #3d4f73;
+  background: #232a38;
+  color: #d0d8e6;
+  cursor: pointer;
+}
+
+table.grid-wb-total .btn-drill-warehouses:hover {
+  border-color: #5a7199;
+  background: #2c3548;
+}
+
+table.grid-wb-total .th-drill-wb-total {
+  min-width: 6rem;
+}
+
 .badge-ok {
   background: #153527;
   color: #86efac;

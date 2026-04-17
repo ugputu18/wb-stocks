@@ -17,5 +17,9 @@ pnpm serve:forecast-ui
 
 ## Ограничения MVP
 
-- Нет drill-down «все склады по выбранному SKU» в одном клике (режим по складам + фильтр `q` / склад).
+- Обратного «одной кнопкой из складов в wb total с тем же фильтром» нет (переключатель вида вручную).
 - `pnpm typecheck` может падать на несвязанных с фичей ошибках в `mapWbSupply.ts` (Zod typings).
+
+## Дополнение: drilldown wb total → склады
+
+В таблице `wbTotal` клик по vendor / nm_id / размеру или кнопка «По складам» вызывает `drillDownToWarehousesFromWbTotal`: `viewMode=wbWarehouses`, `q=nm_id`, `techSize` в скрытом поле, запросы как к обычному API.

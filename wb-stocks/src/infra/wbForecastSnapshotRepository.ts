@@ -772,6 +772,11 @@ export interface ForecastReportFilter {
   /** Vendor fragment or nmId digits — see `buildReportWhere`. */
   q?: string | null;
   /**
+   * Узкий фильтр по `tech_size`, если **`q` — только цифры (nm_id)**.
+   * Используется для drilldown «WB в целом» → строки по складам по одному SKU.
+   */
+  techSize?: string | null;
+  /**
    * Narrow rows by `days_of_stock` (операционный «риск окончания»):
    * - lt7: &lt; 7 — совпадает с bucket critical
    * - lt14: &lt; 14 — critical + warning
@@ -872,6 +877,11 @@ function buildReportWhere(
     if (/^\d+$/.test(q)) {
       clauses.push("nm_id = ?");
       params.push(Number(q));
+      const ts = filter.techSize?.trim();
+      if (ts) {
+        clauses.push("tech_size = ?");
+        params.push(ts);
+      }
     } else {
       const like = `%${escapeLike(q)}%`;
       clauses.push("(vendor_code LIKE ? OR CAST(nm_id AS TEXT) LIKE ?)");
@@ -933,16 +943,28 @@ function skuKeysMatchingScope(
     let qSet: Set<string>;
     if (/^\d+$/.test(q)) {
       const nm = Number(q);
-      const rows = db
-        .prepare(
-          `SELECT DISTINCT nm_id AS nmId, tech_size AS techSize
-             FROM wb_forecast_snapshots
-            WHERE snapshot_date = ? AND horizon_days = ? AND nm_id = ?`,
-        )
-        .all(snapshotDate, horizonDays, nm) as {
-        nmId: number;
-        techSize: string;
-      }[];
+      const ts = filter.techSize?.trim();
+      const rows = ts
+        ? (db
+            .prepare(
+              `SELECT DISTINCT nm_id AS nmId, tech_size AS techSize
+                 FROM wb_forecast_snapshots
+                WHERE snapshot_date = ? AND horizon_days = ? AND nm_id = ? AND tech_size = ?`,
+            )
+            .all(snapshotDate, horizonDays, nm, ts) as {
+            nmId: number;
+            techSize: string;
+          }[])
+        : (db
+            .prepare(
+              `SELECT DISTINCT nm_id AS nmId, tech_size AS techSize
+                 FROM wb_forecast_snapshots
+                WHERE snapshot_date = ? AND horizon_days = ? AND nm_id = ?`,
+            )
+            .all(snapshotDate, horizonDays, nm) as {
+            nmId: number;
+            techSize: string;
+          }[]);
       qSet = new Set(rows.map((r) => skuKey(r.nmId, r.techSize)));
     } else {
       const like = `%${escapeLike(q)}%`;

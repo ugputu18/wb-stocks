@@ -44,19 +44,86 @@ export interface SupplierSkuReplenishmentReadModel {
   nmId: number;
   techSize: string;
   vendorCode: string | null;
+  /** Σ forecast_daily_demand по всем складам WB — дневной спрос «системы» (как у sumForecastDailyDemand) */
+  systemDailyDemand: number;
   /** Σ forecast_daily_demand по всем складам WB для SKU */
   sumForecastDailyDemand: number;
+  /** Параметры плана заказа (echo запроса / фильтра) */
+  leadTimeDays: number;
+  /** Покрытие после прихода (≠ targetCoverageDays для простого recommendedFromSupplier) */
+  orderCoverageDays: number;
+  /** Страховой буфер в формуле покрытия: спрос × (orderCoverageDays + safetyDays). */
+  safetyDays: number;
   targetDemandSystem: number;
   wbAvailableTotal: number;
   ownStock: number;
   systemAvailable: number;
   recommendedFromSupplier: number;
+  stockAtArrival: number;
+  recommendedOrderQty: number;
+  willStockoutBeforeArrival: boolean;
+  daysUntilStockout: number | null;
 }
 
 const EPS = 1e-9;
 
 function ceilNonneg(raw: number): number {
   return raw <= EPS ? 0 : Math.ceil(raw - 1e-12);
+}
+
+/**
+ * План заказа у поставщика с lead time (read-side): спрос системы × дни vs запас на момент прихода.
+ */
+export function buildSupplierOrderPlan(input: {
+  systemDailyDemand: number;
+  wbAvailableTotal: number;
+  ownStock: number;
+  leadTimeDays: number;
+  coverageDays: number;
+  /** default 0 */
+  safetyDays?: number;
+}): {
+  stockAtArrival: number;
+  recommendedOrderQty: number;
+  willStockoutBeforeArrival: boolean;
+  daysUntilStockout: number | null;
+} {
+  const d = Number(input.systemDailyDemand);
+  const wb = Number(input.wbAvailableTotal);
+  const own = Number(input.ownStock);
+  const lt = Number(input.leadTimeDays);
+  const cov = Number(input.coverageDays);
+  const safe = Number(input.safetyDays ?? 0);
+
+  const systemAvailableNow = wb + own;
+  const consumptionDuringLeadTime = d * lt;
+  const stockAtArrival = systemAvailableNow - consumptionDuringLeadTime;
+  const requiredAfterArrival = d * (cov + safe);
+  const recommendedOrderQty = ceilNonneg(requiredAfterArrival - stockAtArrival);
+  const willStockoutBeforeArrival = stockAtArrival < 0;
+  const daysUntilStockout = d > EPS ? systemAvailableNow / d : null;
+
+  return {
+    stockAtArrival,
+    recommendedOrderQty,
+    willStockoutBeforeArrival,
+    daysUntilStockout,
+  };
+}
+
+/**
+ * Read-side дней покрытия по **сети WB** для SKU: `wbAvailableTotal / forecastDailyDemandTotal`.
+ * При нулевом суммарном спросе: при наличии стока — очень большое число (для бакета OK), иначе 0.
+ */
+export function daysOfStockWbFromNetworkTotals(
+  wbAvailableTotal: number,
+  forecastDailyDemandTotal: number,
+): number {
+  const wb = Number(wbAvailableTotal);
+  const fd = Number(forecastDailyDemandTotal);
+  if (!Number.isFinite(wb)) return 0;
+  if (!Number.isFinite(fd) || fd <= EPS) return wb > EPS ? 1e6 : 0;
+  return wb / fd;
 }
 
 export function buildInventoryLevels(

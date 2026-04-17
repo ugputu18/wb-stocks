@@ -62,6 +62,25 @@ h2 {
   min-width: 200px;
 }
 
+#supplierPanel .supplier-plan-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+#supplierPanel .supplier-plan-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+}
+
+#supplierPanel .supplier-plan-controls input {
+  width: 6rem;
+}
+
 input,
 select,
 button {
@@ -213,6 +232,41 @@ tbody tr.tr-selected {
 .badge-attention {
   background: #263419;
   color: #bef264;
+}
+
+/* Режим «WB в целом»: первая колонка (CRITICAL / WARNING / …), затем vendor */
+table.grid-wb-total .th-risk-wb-total {
+  min-width: 6.75rem;
+}
+
+table.grid-wb-total .th-vendor-wb-total {
+  min-width: 7rem;
+}
+
+table.grid-wb-total td.risk-cell-wb-total {
+  padding: 0.4rem 0.55rem 0.4rem 0.6rem;
+  vertical-align: middle;
+}
+
+table.grid-wb-total .badge-wb-total {
+  display: inline-block;
+  min-width: 5.25rem;
+  text-align: center;
+  padding: 0.4rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+table.grid-wb-total td.col-vendor-wb-total {
+  font-weight: 600;
+  color: #eef0f3;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .badge-ok {

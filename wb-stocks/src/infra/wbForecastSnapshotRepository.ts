@@ -3,8 +3,10 @@ import type { WbForecastSnapshotRecord } from "../domain/wbForecastSnapshot.js";
 import { riskBucketFromDaysOfStock } from "../domain/forecastRiskBucket.js";
 import {
   buildInventoryLevels,
+  buildSupplierOrderPlan,
   buildSupplierSkuReplenishment,
   buildWbRowReplenishment,
+  daysOfStockWbFromNetworkTotals,
   type InventoryLevelsReadModel,
   type ReplenishmentMode,
   type SupplierSkuReplenishmentReadModel,
@@ -278,6 +280,25 @@ export class WbForecastSnapshotRepository {
       this.db,
     ).quantitiesByVendor(snapshotDate, ownWh);
 
+    const leadDays =
+      filter.supplierLeadTimeDays !== undefined &&
+      Number.isFinite(filter.supplierLeadTimeDays) &&
+      filter.supplierLeadTimeDays > 0
+        ? Math.floor(filter.supplierLeadTimeDays)
+        : 45;
+    const orderCovDays =
+      filter.supplierOrderCoverageDays !== undefined &&
+      Number.isFinite(filter.supplierOrderCoverageDays) &&
+      filter.supplierOrderCoverageDays > 0
+        ? Math.floor(filter.supplierOrderCoverageDays)
+        : 90;
+    const safetyDays =
+      filter.supplierSafetyDays !== undefined &&
+      Number.isFinite(filter.supplierSafetyDays) &&
+      filter.supplierSafetyDays >= 0
+        ? Math.floor(filter.supplierSafetyDays)
+        : 0;
+
     const out: SupplierSkuReplenishmentReadModel[] = [];
     for (const g of grouped) {
       const k = skuKey(g.nmId, g.techSize);
@@ -291,12 +312,28 @@ export class WbForecastSnapshotRepository {
         ownQty,
         targetCoverageDays,
       );
+      const plan = buildSupplierOrderPlan({
+        systemDailyDemand: g.sumFd,
+        wbAvailableTotal: g.sumWb,
+        ownStock: ownQty,
+        leadTimeDays: leadDays,
+        coverageDays: orderCovDays,
+        safetyDays,
+      });
       out.push({
         nmId: g.nmId,
         techSize: g.techSize,
         vendorCode: g.vendorCode,
+        systemDailyDemand: g.sumFd,
         sumForecastDailyDemand: g.sumFd,
+        leadTimeDays: leadDays,
+        orderCoverageDays: orderCovDays,
+        safetyDays,
         ...part,
+        stockAtArrival: plan.stockAtArrival,
+        recommendedOrderQty: plan.recommendedOrderQty,
+        willStockoutBeforeArrival: plan.willStockoutBeforeArrival,
+        daysUntilStockout: plan.daysUntilStockout,
       });
     }
     out.sort(
@@ -306,9 +343,254 @@ export class WbForecastSnapshotRepository {
   }
 
   /**
-   * Aggregate KPIs for the same filter as `listReportRows` (SQL, no client scan).
+   * SKU × сеть WB (одна строка на номенклатуру): агрегаты по `warehouse_key`, read-side.
+   */
+  listWbTotalBySkuReportRows(
+    snapshotDate: string,
+    horizonDays: number,
+    filter: ForecastReportFilter,
+    limit?: number,
+  ): WbTotalBySkuReportRow[] {
+    const full = this.buildWbTotalBySkuReportRowsFull(
+      snapshotDate,
+      horizonDays,
+      filter,
+    );
+    if (
+      limit !== undefined &&
+      (!Number.isInteger(limit) || limit <= 0 || limit > 50_000)
+    ) {
+      throw new Error("listWbTotalBySkuReportRows: limit must be 1..50000 or omitted");
+    }
+    return limit !== undefined ? full.slice(0, limit) : full;
+  }
+
+  /**
+   * Aggregate KPIs: либо по строкам складов (`wbWarehouses`), либо по SKU-сети (`wbTotal`, default).
    */
   aggregateReportMetrics(
+    snapshotDate: string,
+    horizonDays: number,
+    filter: ForecastReportFilter,
+  ): ForecastReportAggregate {
+    const mode = filter.viewMode ?? "wbTotal";
+    if (mode === "wbWarehouses") {
+      return this.aggregateWarehouseRowReportMetrics(
+        snapshotDate,
+        horizonDays,
+        filter,
+      );
+    }
+    return this.aggregateWbTotalBySkuReportMetrics(snapshotDate, horizonDays, filter);
+  }
+
+  /**
+   * Полный список SKU-строк для агрегатов и KPI (без LIMIT).
+   */
+  private buildWbTotalBySkuReportRowsFull(
+    snapshotDate: string,
+    horizonDays: number,
+    filter: ForecastReportFilter,
+  ): WbTotalBySkuReportRow[] {
+    const grouped = this.db
+      .prepare(
+        `SELECT nm_id AS nmId,
+                tech_size AS techSize,
+                SUM(forecast_daily_demand) AS sumFd,
+                SUM(start_stock + incoming_units) AS sumWb,
+                MIN(stockout_date) AS stockoutDateWB,
+                MAX(vendor_code) AS vendorCode,
+                MIN(stock_snapshot_at) AS minStockSnapshotAt
+           FROM wb_forecast_snapshots
+          WHERE snapshot_date = ? AND horizon_days = ?
+          GROUP BY nm_id, tech_size`,
+      )
+      .all(snapshotDate, horizonDays) as {
+      nmId: number;
+      techSize: string;
+      sumFd: number;
+      sumWb: number;
+      stockoutDateWB: string | null;
+      vendorCode: string | null;
+      minStockSnapshotAt: string | null;
+    }[];
+
+    const scopeKeys = skuKeysMatchingScope(
+      this.db,
+      snapshotDate,
+      horizonDays,
+      filter,
+    );
+    const ownWh =
+      filter.ownWarehouseCode?.trim() || DEFAULT_WAREHOUSE_CODE;
+    const ownByVendor = new OwnStockSnapshotRepository(
+      this.db,
+    ).quantitiesByVendor(snapshotDate, ownWh);
+    const tc = filter.replenishmentTargetCoverageDays;
+
+    const out: WbTotalBySkuReportRow[] = [];
+    for (const g of grouped) {
+      const k = skuKey(g.nmId, g.techSize);
+      if (scopeKeys && !scopeKeys.has(k)) continue;
+
+      const daysWb = daysOfStockWbFromNetworkTotals(g.sumWb, g.sumFd);
+      if (!aggregatedRiskStockoutMatches(daysWb, filter.riskStockout ?? "all")) {
+        continue;
+      }
+
+      const risk = riskBucketFromDaysOfStock(
+        Math.min(999_999, Math.floor(daysWb)),
+      );
+      const vend = (g.vendorCode ?? "").trim();
+      const ownQty = vend ? (ownByVendor.get(vend) ?? 0) : 0;
+      const inventoryLevels = buildInventoryLevels(g.sumWb, g.sumWb, ownQty);
+
+      let replenishment: WbRowReplenishmentReadModel | undefined;
+      let recommendedFromSupplier = 0;
+      if (tc !== undefined && Number.isFinite(tc) && tc > 0) {
+        replenishment = buildWbRowReplenishment(g.sumFd, tc, g.sumWb);
+        recommendedFromSupplier = buildSupplierSkuReplenishment(
+          g.sumFd,
+          g.sumWb,
+          ownQty,
+          tc,
+        ).recommendedFromSupplier;
+      }
+
+      out.push({
+        viewKind: "wbTotal",
+        nmId: g.nmId,
+        techSize: g.techSize,
+        vendorCode: g.vendorCode,
+        daysOfStockWB: daysWb,
+        stockoutDateWB: g.stockoutDateWB,
+        stockSnapshotAtWB: g.minStockSnapshotAt ?? "",
+        forecastDailyDemandTotal: g.sumFd,
+        wbAvailableTotal: g.sumWb,
+        ownStock: ownQty,
+        risk,
+        inventoryLevels,
+        replenishment,
+        recommendedFromSupplier,
+      });
+    }
+
+    // Default order for «WB в целом»: сначала худшие по дням запаса сети, при равенстве — выше спрос.
+    out.sort((a, b) => {
+      const c = a.daysOfStockWB - b.daysOfStockWB;
+      if (c !== 0) return c;
+      return b.forecastDailyDemandTotal - a.forecastDailyDemandTotal;
+    });
+    return out;
+  }
+
+  private aggregateWbTotalBySkuReportMetrics(
+    snapshotDate: string,
+    horizonDays: number,
+    filter: ForecastReportFilter,
+  ): ForecastReportAggregate {
+    const full = this.buildWbTotalBySkuReportRowsFull(
+      snapshotDate,
+      horizonDays,
+      filter,
+    );
+
+    let critical = 0;
+    let warning = 0;
+    let attention = 0;
+    let ok = 0;
+    let staleStockRowCount = 0;
+    let oldestStockSnapshotAt: string | null = null;
+    let newestStockSnapshotAt: string | null = null;
+
+    for (const r of full) {
+      if (r.risk === "critical") critical += 1;
+      else if (r.risk === "warning") warning += 1;
+      else if (r.risk === "attention") attention += 1;
+      else ok += 1;
+
+      const sn = r.stockSnapshotAtWB?.trim();
+      if (sn && sn.length >= 10 && sn.slice(0, 10) < snapshotDate) {
+        staleStockRowCount += 1;
+      }
+      if (sn) {
+        if (
+          oldestStockSnapshotAt === null ||
+          sn < oldestStockSnapshotAt
+        ) {
+          oldestStockSnapshotAt = sn;
+        }
+        if (
+          newestStockSnapshotAt === null ||
+          sn > newestStockSnapshotAt
+        ) {
+          newestStockSnapshotAt = sn;
+        }
+      }
+    }
+
+    let recommendedToWBTotal = 0;
+    let recommendedFromSupplierTotal = 0;
+    let recommendedOrderQtyTotal = 0;
+    const tc = filter.replenishmentTargetCoverageDays;
+    const ownWh =
+      filter.ownWarehouseCode?.trim() || DEFAULT_WAREHOUSE_CODE;
+
+    if (tc !== undefined && Number.isFinite(tc) && tc > 0) {
+      for (const r of full) {
+        if (r.replenishment) {
+          recommendedToWBTotal += r.replenishment.recommendedToWB;
+        }
+      }
+      const supplierRows = this.listSupplierReplenishmentBySku(
+        snapshotDate,
+        horizonDays,
+        {
+          warehouseKey: filter.warehouseKey,
+          q: filter.q,
+          ownWarehouseCode: filter.ownWarehouseCode,
+          replenishmentMode: filter.replenishmentMode,
+          replenishmentTargetCoverageDays: tc,
+          supplierLeadTimeDays: filter.supplierLeadTimeDays,
+          supplierOrderCoverageDays: filter.supplierOrderCoverageDays,
+          supplierSafetyDays: filter.supplierSafetyDays,
+        },
+        tc,
+      );
+      recommendedFromSupplierTotal = supplierRows.reduce(
+        (s, x) => s + x.recommendedFromSupplier,
+        0,
+      );
+      recommendedOrderQtyTotal = supplierRows.reduce(
+        (s, x) => s + x.recommendedOrderQty,
+        0,
+      );
+    }
+
+    return {
+      totalRows: full.length,
+      risk: { critical, warning, attention, ok },
+      staleStockRowCount,
+      oldestStockSnapshotAt,
+      newestStockSnapshotAt,
+      replenishment:
+        tc !== undefined && Number.isFinite(tc) && tc > 0
+          ? {
+              targetCoverageDays: tc,
+              replenishmentMode: filter.replenishmentMode ?? "wb",
+              ownWarehouseCode: ownWh,
+              recommendedToWBTotal,
+              recommendedFromSupplierTotal,
+              recommendedOrderQtyTotal,
+              leadTimeDays: filter.supplierLeadTimeDays ?? 45,
+              orderCoverageDays: filter.supplierOrderCoverageDays ?? 90,
+              safetyDays: filter.supplierSafetyDays ?? 0,
+            }
+          : undefined,
+    };
+  }
+
+  private aggregateWarehouseRowReportMetrics(
     snapshotDate: string,
     horizonDays: number,
     filter: ForecastReportFilter,
@@ -340,6 +622,7 @@ export class WbForecastSnapshotRepository {
     };
     let recommendedToWBTotal = 0;
     let recommendedFromSupplierTotal = 0;
+    let recommendedOrderQtyTotal = 0;
     const tc = filter.replenishmentTargetCoverageDays;
     const ownWh =
       filter.ownWarehouseCode?.trim() || DEFAULT_WAREHOUSE_CODE;
@@ -383,12 +666,19 @@ export class WbForecastSnapshotRepository {
           ownWarehouseCode: filter.ownWarehouseCode,
           replenishmentMode: filter.replenishmentMode,
           replenishmentTargetCoverageDays: tc,
+          supplierLeadTimeDays: filter.supplierLeadTimeDays,
+          supplierOrderCoverageDays: filter.supplierOrderCoverageDays,
+          supplierSafetyDays: filter.supplierSafetyDays,
         },
         tc,
       );
       /* Одна строка на SKU в supplierRows — сумма не зависит от числа складов на артикул. */
       recommendedFromSupplierTotal = supplierRows.reduce(
         (s, x) => s + x.recommendedFromSupplier,
+        0,
+      );
+      recommendedOrderQtyTotal = supplierRows.reduce(
+        (s, x) => s + x.recommendedOrderQty,
         0,
       );
     }
@@ -411,10 +701,25 @@ export class WbForecastSnapshotRepository {
               ownWarehouseCode: ownWh,
               recommendedToWBTotal,
               recommendedFromSupplierTotal,
+              recommendedOrderQtyTotal,
+              leadTimeDays: filter.supplierLeadTimeDays ?? 45,
+              orderCoverageDays: filter.supplierOrderCoverageDays ?? 90,
+              safetyDays: filter.supplierSafetyDays ?? 0,
             }
           : undefined,
     };
   }
+}
+
+function aggregatedRiskStockoutMatches(
+  daysWb: number,
+  rs: RiskStockoutFilter,
+): boolean {
+  if (rs === "all") return true;
+  if (rs === "lt7") return daysWb < 7;
+  if (rs === "lt14") return daysWb < 14;
+  if (rs === "lt30") return daysWb < 30;
+  return true;
 }
 
 function skuKey(nmId: number, techSize: string): string {
@@ -479,12 +784,49 @@ export interface ForecastReportFilter {
   replenishmentMode?: ReplenishmentMode | null;
   /** Код нашего склада в `own_stock_snapshots` (default `main`). */
   ownWarehouseCode?: string | null;
+  /** Lead time для плана заказа у поставщика (дней), query `leadTimeDays`. Default 45. */
+  supplierLeadTimeDays?: number;
+  /** Покрытие после прихода для плана заказа (дней), query `coverageDays`. Default 90. */
+  supplierOrderCoverageDays?: number;
+  /** Страховые дни в целевом покрытии после прихода, query `safetyDays`. Default 0. */
+  supplierSafetyDays?: number;
+  /**
+   * Вид основной таблицы: `wbTotal` — одна строка на SKU по сети WB (default);
+   * `wbWarehouses` — строки `warehouse × sku`.
+   */
+  viewMode?: ForecastViewMode | null;
 }
 
 export interface WbForecastSnapshotReportRow extends WbForecastSnapshotRecord {
   risk: import("../domain/forecastRiskBucket.js").ForecastRiskBucket;
   inventoryLevels: InventoryLevelsReadModel;
   replenishment?: WbRowReplenishmentReadModel;
+}
+
+/** Режим основной таблицы forecast UI. */
+export type ForecastViewMode = "wbTotal" | "wbWarehouses";
+
+/**
+ * Одна строка = SKU по всей сети WB (read-side GROUP BY `nm_id`, `tech_size`).
+ * `daysOfStockWB` = `wbAvailableTotal / forecastDailyDemandTotal` (при нулевом спросе — см. домен).
+ */
+export interface WbTotalBySkuReportRow {
+  viewKind: "wbTotal";
+  nmId: number;
+  techSize: string;
+  vendorCode: string | null;
+  daysOfStockWB: number;
+  stockoutDateWB: string | null;
+  /** Минимум `stock_snapshot_at` по складам для SKU. */
+  stockSnapshotAtWB: string;
+  forecastDailyDemandTotal: number;
+  wbAvailableTotal: number;
+  ownStock: number;
+  risk: import("../domain/forecastRiskBucket.js").ForecastRiskBucket;
+  inventoryLevels: InventoryLevelsReadModel;
+  replenishment?: WbRowReplenishmentReadModel;
+  /** Согласовано с supplier-level `recommendedFromSupplier` для того же SKU и `targetCoverageDays`. */
+  recommendedFromSupplier: number;
 }
 
 export interface ForecastReportAggregate {
@@ -504,6 +846,10 @@ export interface ForecastReportAggregate {
     ownWarehouseCode: string;
     recommendedToWBTotal: number;
     recommendedFromSupplierTotal: number;
+    recommendedOrderQtyTotal: number;
+    leadTimeDays: number;
+    orderCoverageDays: number;
+    safetyDays: number;
   };
 }
 

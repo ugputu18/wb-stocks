@@ -18,8 +18,13 @@ import {
 import type { ReplenishmentMode } from "../domain/multiLevelInventory.js";
 import type {
   ForecastReportFilter,
+  ForecastViewMode,
   RiskStockoutFilter,
+  WbForecastSnapshotReportRow,
+  WbTotalBySkuReportRow,
 } from "../infra/wbForecastSnapshotRepository.js";
+import type { SupplierSkuReplenishmentReadModel } from "../domain/multiLevelInventory.js";
+import { toCsv } from "./csv.js";
 
 const STATIC_DIR = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -88,6 +93,35 @@ const ROWS_LIMIT_MAX = 2000;
 
 const ALLOWED_TARGET_COVERAGE = new Set([30, 45, 60]);
 
+const DEFAULT_SUPPLIER_LEAD_DAYS = 45;
+const DEFAULT_SUPPLIER_ORDER_COVERAGE_DAYS = 90;
+const DEFAULT_SUPPLIER_SAFETY_DAYS = 0;
+
+function parseSupplierLeadTimeDays(url: URL): number {
+  const raw = url.searchParams.get("leadTimeDays");
+  if (raw === null || raw.trim() === "") return DEFAULT_SUPPLIER_LEAD_DAYS;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 365) return DEFAULT_SUPPLIER_LEAD_DAYS;
+  return n;
+}
+
+/** Покрытие после прихода (план заказа); не путать с `targetCoverageDays`. */
+function parseSupplierOrderCoverageDays(url: URL): number {
+  const raw = url.searchParams.get("coverageDays");
+  if (raw === null || raw.trim() === "") return DEFAULT_SUPPLIER_ORDER_COVERAGE_DAYS;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 730) return DEFAULT_SUPPLIER_ORDER_COVERAGE_DAYS;
+  return n;
+}
+
+function parseSupplierSafetyDays(url: URL): number {
+  const raw = url.searchParams.get("safetyDays");
+  if (raw === null || raw.trim() === "") return DEFAULT_SUPPLIER_SAFETY_DAYS;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0 || n > 365) return DEFAULT_SUPPLIER_SAFETY_DAYS;
+  return n;
+}
+
 function parseRiskStockout(raw: string | null): RiskStockoutFilter {
   const t = raw?.trim().toLowerCase() ?? "";
   if (t === "" || t === "all") return "all";
@@ -111,12 +145,168 @@ function parseReplenishmentMode(url: URL): ReplenishmentMode {
   return "wb";
 }
 
+/** Default `wbTotal` — одна строка на SKU по сети WB. */
+function parseViewMode(url: URL): ForecastViewMode {
+  const raw = url.searchParams.get("viewMode")?.trim().toLowerCase() ?? "";
+  if (raw === "wbwarehouses" || raw === "warehouses" || raw === "by-warehouse") {
+    return "wbWarehouses";
+  }
+  return "wbTotal";
+}
+
 function parseOwnWarehouseCode(url: URL): string {
   const raw = url.searchParams.get("ownWarehouseCode")?.trim();
   return raw && raw.length > 0 ? raw : DEFAULT_OWN_WAREHOUSE_CODE;
 }
 
 const DEFAULT_OWN_WAREHOUSE_CODE = "main";
+
+const CSV_UTF8_BOM = "\uFEFF";
+
+/** Supplier export: `targetCoverageDays` must be present and valid (30 | 45 | 60). */
+function parseRequiredTargetCoverageDays(url: URL): number | null {
+  const raw = url.searchParams.get("targetCoverageDays");
+  if (raw === null || raw.trim() === "") return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || !ALLOWED_TARGET_COVERAGE.has(n)) return null;
+  return n;
+}
+
+const WB_EXPORT_COLUMNS = [
+  "warehouse_key",
+  "vendor_code",
+  "nm_id",
+  "tech_size",
+  "local_available",
+  "wb_available",
+  "system_available",
+  "forecast_daily_demand",
+  "days_of_stock",
+  "stockout_date",
+  "recommended_to_wb",
+  "risk_bucket",
+] as const;
+
+const WB_TOTAL_EXPORT_COLUMNS = [
+  "risk_bucket",
+  "vendor_code",
+  "nm_id",
+  "tech_size",
+  "wb_available_total",
+  "own_stock",
+  "system_available",
+  "days_of_stock_wb",
+  "forecast_daily_demand_total",
+  "recommended_to_wb",
+  "recommended_from_supplier",
+  "stockout_date_wb",
+  "stock_snapshot_at_wb",
+] as const;
+
+const SUPPLIER_EXPORT_COLUMNS = [
+  "vendor_code",
+  "nm_id",
+  "tech_size",
+  "wb_available_total",
+  "own_stock",
+  "system_available",
+  "target_coverage_days",
+  "target_demand_system",
+  "recommended_from_supplier",
+  "lead_time_days",
+  "order_coverage_days",
+  "safety_days",
+  "stock_at_arrival",
+  "recommended_order_qty",
+  "will_stockout_before_arrival",
+  "days_until_stockout",
+] as const;
+
+function forecastWbCsvFilename(snapshotDate: string, horizonDays: number): string {
+  return `wb-replenishment-${snapshotDate}-h${horizonDays}.csv`;
+}
+
+function forecastSupplierCsvFilename(snapshotDate: string, horizonDays: number): string {
+  return `supplier-replenishment-${snapshotDate}-h${horizonDays}.csv`;
+}
+
+function wbTotalRowsToCsvObjects(
+  rows: WbTotalBySkuReportRow[],
+): Record<string, unknown>[] {
+  return rows.map((row) => ({
+    risk_bucket: row.risk,
+    vendor_code: row.vendorCode ?? "",
+    nm_id: row.nmId,
+    tech_size: row.techSize,
+    wb_available_total: row.wbAvailableTotal,
+    own_stock: row.ownStock,
+    system_available: row.inventoryLevels.systemAvailable,
+    days_of_stock_wb: row.daysOfStockWB,
+    forecast_daily_demand_total: row.forecastDailyDemandTotal,
+    recommended_to_wb: row.replenishment?.recommendedToWB ?? "",
+    recommended_from_supplier: row.recommendedFromSupplier,
+    stockout_date_wb: row.stockoutDateWB ?? "",
+    stock_snapshot_at_wb: row.stockSnapshotAtWB,
+  }));
+}
+
+function wbReportRowsToCsvObjects(
+  rows: WbForecastSnapshotReportRow[],
+): Record<string, unknown>[] {
+  return rows.map((row) => ({
+    warehouse_key: row.warehouseKey,
+    vendor_code: row.vendorCode ?? "",
+    nm_id: row.nmId,
+    tech_size: row.techSize,
+    local_available: row.inventoryLevels.localAvailable,
+    wb_available: row.inventoryLevels.wbAvailable,
+    system_available: row.inventoryLevels.systemAvailable,
+    forecast_daily_demand: row.forecastDailyDemand,
+    days_of_stock: row.daysOfStock,
+    stockout_date: row.stockoutDate ?? "",
+    recommended_to_wb: row.replenishment?.recommendedToWB ?? "",
+    risk_bucket: row.risk,
+  }));
+}
+
+function supplierRowsToCsvObjects(
+  rows: SupplierSkuReplenishmentReadModel[],
+  targetCoverageDays: number,
+): Record<string, unknown>[] {
+  return rows.map((r) => ({
+    vendor_code: r.vendorCode ?? "",
+    nm_id: r.nmId,
+    tech_size: r.techSize,
+    wb_available_total: r.wbAvailableTotal,
+    own_stock: r.ownStock,
+    system_available: r.systemAvailable,
+    target_coverage_days: targetCoverageDays,
+    target_demand_system: r.targetDemandSystem,
+    recommended_from_supplier: r.recommendedFromSupplier,
+    lead_time_days: r.leadTimeDays,
+    order_coverage_days: r.orderCoverageDays,
+    safety_days: r.safetyDays,
+    stock_at_arrival: r.stockAtArrival,
+    recommended_order_qty: r.recommendedOrderQty,
+    will_stockout_before_arrival: r.willStockoutBeforeArrival ? "true" : "false",
+    days_until_stockout:
+      r.daysUntilStockout === null || r.daysUntilStockout === undefined
+        ? ""
+        : r.daysUntilStockout,
+  }));
+}
+
+function sendCsvAttachment(
+  res: ServerResponse,
+  filename: string,
+  csvBody: string,
+): void {
+  res.writeHead(200, {
+    "Content-Type": "text/csv; charset=utf-8",
+    "Content-Disposition": `attachment; filename="${filename}"`,
+  });
+  res.end(CSV_UTF8_BOM + csvBody, "utf8");
+}
 
 function parseQuery(url: URL): ForecastReportFilter & {
   snapshotDate: string;
@@ -131,6 +321,10 @@ function parseQuery(url: URL): ForecastReportFilter & {
   const replenishmentTargetCoverageDays = parseTargetCoverageDays(url);
   const replenishmentMode = parseReplenishmentMode(url);
   const ownWarehouseCode = parseOwnWarehouseCode(url);
+  const supplierLeadTimeDays = parseSupplierLeadTimeDays(url);
+  const supplierOrderCoverageDays = parseSupplierOrderCoverageDays(url);
+  const supplierSafetyDays = parseSupplierSafetyDays(url);
+  const viewMode = parseViewMode(url);
   return {
     snapshotDate,
     horizonDays,
@@ -140,6 +334,10 @@ function parseQuery(url: URL): ForecastReportFilter & {
     replenishmentTargetCoverageDays,
     replenishmentMode,
     ownWarehouseCode,
+    supplierLeadTimeDays,
+    supplierOrderCoverageDays,
+    supplierSafetyDays,
+    viewMode,
   };
 }
 
@@ -256,16 +454,29 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
           replenishmentTargetCoverageDays: q.replenishmentTargetCoverageDays,
           replenishmentMode: q.replenishmentMode,
           ownWarehouseCode: q.ownWarehouseCode,
+          supplierLeadTimeDays: q.supplierLeadTimeDays,
+          supplierOrderCoverageDays: q.supplierOrderCoverageDays,
+          supplierSafetyDays: q.supplierSafetyDays,
+          viewMode: q.viewMode,
         };
-        const rows = forecastRepo.listReportRows(
-          q.snapshotDate,
-          q.horizonDays,
-          filter,
-          limit,
-        );
+        const rows =
+          q.viewMode === "wbWarehouses"
+            ? forecastRepo.listReportRows(
+                q.snapshotDate,
+                q.horizonDays,
+                filter,
+                limit,
+              )
+            : forecastRepo.listWbTotalBySkuReportRows(
+                q.snapshotDate,
+                q.horizonDays,
+                filter,
+                limit,
+              );
         json(res, 200, {
           snapshotDate: q.snapshotDate,
           horizonDays: q.horizonDays,
+          viewMode: q.viewMode,
           riskStockout: q.riskStockout,
           targetCoverageDays: q.replenishmentTargetCoverageDays,
           replenishmentMode: q.replenishmentMode,
@@ -289,6 +500,10 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
           replenishmentTargetCoverageDays: q.replenishmentTargetCoverageDays,
           replenishmentMode: q.replenishmentMode,
           ownWarehouseCode: q.ownWarehouseCode,
+          supplierLeadTimeDays: q.supplierLeadTimeDays,
+          supplierOrderCoverageDays: q.supplierOrderCoverageDays,
+          supplierSafetyDays: q.supplierSafetyDays,
+          viewMode: q.viewMode,
         };
         const agg = forecastRepo.aggregateReportMetrics(
           q.snapshotDate,
@@ -298,6 +513,7 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
         json(res, 200, {
           snapshotDate: q.snapshotDate,
           horizonDays: q.horizonDays,
+          viewMode: q.viewMode,
           riskStockout: q.riskStockout,
           targetCoverageDays: q.replenishmentTargetCoverageDays,
           replenishmentMode: q.replenishmentMode,
@@ -308,6 +524,9 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
           oldestStockSnapshotAt: agg.oldestStockSnapshotAt,
           newestStockSnapshotAt: agg.newestStockSnapshotAt,
           replenishment: agg.replenishment,
+          leadTimeDays: q.supplierLeadTimeDays,
+          coverageDays: q.supplierOrderCoverageDays,
+          safetyDays: q.supplierSafetyDays,
         });
         return;
       }
@@ -319,7 +538,7 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
           return;
         }
         const tc = q.replenishmentTargetCoverageDays;
-        if (!Number.isFinite(tc) || tc <= 0) {
+        if (tc === undefined || !Number.isFinite(tc) || tc <= 0) {
           json(res, 400, {
             ok: false,
             error: "targetCoverageDays required (30 | 45 | 60)",
@@ -332,6 +551,10 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
           ownWarehouseCode: q.ownWarehouseCode,
           replenishmentMode: q.replenishmentMode,
           replenishmentTargetCoverageDays: tc,
+          supplierLeadTimeDays: q.supplierLeadTimeDays,
+          supplierOrderCoverageDays: q.supplierOrderCoverageDays,
+          supplierSafetyDays: q.supplierSafetyDays,
+          viewMode: q.viewMode,
         };
         const supplierRows = forecastRepo.listSupplierReplenishmentBySku(
           q.snapshotDate,
@@ -343,9 +566,106 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
           snapshotDate: q.snapshotDate,
           horizonDays: q.horizonDays,
           targetCoverageDays: tc,
+          leadTimeDays: q.supplierLeadTimeDays,
+          coverageDays: q.supplierOrderCoverageDays,
+          safetyDays: q.supplierSafetyDays,
           ownWarehouseCode: q.ownWarehouseCode ?? "main",
+          viewMode: q.viewMode,
           rows: supplierRows,
         });
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/forecast/export-wb") {
+        const q = parseQuery(url);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(q.snapshotDate) || !Number.isInteger(q.horizonDays) || q.horizonDays <= 0) {
+          json(res, 400, { ok: false, error: "snapshotDate and horizonDays required" });
+          return;
+        }
+        const filter: ForecastReportFilter = {
+          warehouseKey: q.warehouseKey,
+          q: q.q,
+          riskStockout: q.riskStockout,
+          replenishmentTargetCoverageDays: q.replenishmentTargetCoverageDays,
+          replenishmentMode: q.replenishmentMode,
+          ownWarehouseCode: q.ownWarehouseCode,
+          supplierLeadTimeDays: q.supplierLeadTimeDays,
+          supplierOrderCoverageDays: q.supplierOrderCoverageDays,
+          supplierSafetyDays: q.supplierSafetyDays,
+          viewMode: q.viewMode,
+        };
+        const csv =
+          q.viewMode === "wbWarehouses"
+            ? toCsv(
+                wbReportRowsToCsvObjects(
+                  forecastRepo.listReportRows(
+                    q.snapshotDate,
+                    q.horizonDays,
+                    filter,
+                    undefined,
+                  ),
+                ),
+                [...WB_EXPORT_COLUMNS],
+              )
+            : toCsv(
+                wbTotalRowsToCsvObjects(
+                  forecastRepo.listWbTotalBySkuReportRows(
+                    q.snapshotDate,
+                    q.horizonDays,
+                    filter,
+                    undefined,
+                  ),
+                ),
+                [...WB_TOTAL_EXPORT_COLUMNS],
+              );
+        sendCsvAttachment(
+          res,
+          forecastWbCsvFilename(q.snapshotDate, q.horizonDays),
+          csv,
+        );
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/forecast/export-supplier") {
+        const q = parseQuery(url);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(q.snapshotDate) || !Number.isInteger(q.horizonDays) || q.horizonDays <= 0) {
+          json(res, 400, { ok: false, error: "snapshotDate and horizonDays required" });
+          return;
+        }
+        const tc = parseRequiredTargetCoverageDays(url);
+        if (tc === null) {
+          json(res, 400, {
+            ok: false,
+            error: "targetCoverageDays required (30 | 45 | 60)",
+          });
+          return;
+        }
+        const supplierFilter: ForecastReportFilter = {
+          warehouseKey: q.warehouseKey,
+          q: q.q,
+          ownWarehouseCode: q.ownWarehouseCode,
+          replenishmentMode: q.replenishmentMode,
+          replenishmentTargetCoverageDays: tc,
+          supplierLeadTimeDays: q.supplierLeadTimeDays,
+          supplierOrderCoverageDays: q.supplierOrderCoverageDays,
+          supplierSafetyDays: q.supplierSafetyDays,
+          viewMode: q.viewMode,
+        };
+        const supplierRows = forecastRepo.listSupplierReplenishmentBySku(
+          q.snapshotDate,
+          q.horizonDays,
+          supplierFilter,
+          tc,
+        );
+        const csv = toCsv(
+          supplierRowsToCsvObjects(supplierRows, tc),
+          [...SUPPLIER_EXPORT_COLUMNS],
+        );
+        sendCsvAttachment(
+          res,
+          forecastSupplierCsvFilename(q.snapshotDate, q.horizonDays),
+          csv,
+        );
         return;
       }
 

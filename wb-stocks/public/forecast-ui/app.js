@@ -4,6 +4,8 @@
   const $ = (id) => document.getElementById(id);
 
   let lastRows = [];
+  let lastTotalRows = 0;
+  let lastSupplierRowCount = 0;
 
   function todayYmd() {
     const d = new Date();
@@ -71,6 +73,61 @@
     return data;
   }
 
+  const THEAD_WB_TOTAL = `<tr>
+          <th class="th-risk-wb-total" scope="col" title="Бакет риска по дням запаса WB (агрегат сети)">Риск</th>
+          <th class="th-vendor-wb-total" scope="col" title="vendor_code">vendor</th>
+          <th>nm_id</th>
+          <th>Размер</th>
+          <th title="Сумма (start_stock + incoming) по всем складам WB">WB ∑</th>
+          <th title="Наш склад (own CSV)">Own</th>
+          <th title="WB∑ + own">System</th>
+          <th title="Покрытие по сети: WB∑ / Σ спрос">Дн. WB</th>
+          <th title="Σ forecast_daily_demand по сети">Спрос/день Σ</th>
+          <th title="max(0, спрос×дни − WB∑ по сети)">На WB</th>
+          <th title="Та же формула, что в блоке закупки">У пр-ля</th>
+          <th title="MIN(stockout_date) по складам">OOS (WB)</th>
+        </tr>`;
+
+  const THEAD_WAREHOUSES = `<tr>
+            <th>Risk</th>
+            <th title="Система · WB · локальный склад">Риск<br/>уровней</th>
+            <th>Склад WB</th>
+            <th>nm_id</th>
+            <th>vendor</th>
+            <th>Дней запаса</th>
+            <th>Спрос/день</th>
+            <th title="Наш склад + все WB">System</th>
+            <th title="Сумма по складам WB">WB ∑</th>
+            <th title="Этот склад WB">WB лок.</th>
+            <th title="Склад: max(0, спрос×дни − WB∑)">На WB</th>
+            <th>Сток снимок</th>
+          </tr>`;
+
+  function renderTableHeader(viewMode) {
+    const thead = $("gridThead");
+    if (!thead) return;
+    thead.innerHTML =
+      viewMode === "wbWarehouses" ? THEAD_WAREHOUSES : THEAD_WB_TOTAL;
+    const grid = $("grid");
+    if (grid) {
+      grid.classList.toggle("grid-wb-total", viewMode !== "wbWarehouses");
+    }
+  }
+
+  function updateMainTableHint(viewMode) {
+    const el = $("mainTableHintText");
+    if (!el) return;
+    if (viewMode === "wbWarehouses") {
+      el.innerHTML =
+        "Режим <strong>по складам WB</strong>: строка = склад × SKU. System = все WB + наш склад; WB ∑ = сумма по сети; WB лок. = этот склад. S/W/L — риск по уровням. " +
+        "Колонка «На WB» — довоз с учётом network-запаса; закупка у производителя — в таблице ниже.";
+    } else {
+      el.innerHTML =
+        "Режим по умолчанию: <strong>WB в целом</strong> — одна строка на SKU по сети; риск и дни запаса — по агрегату сети (read-side GROUP BY). " +
+        "Сортировка по умолчанию: <strong>daysOfStockWB</strong> по возрастанию (хуже запас — выше), затем <strong>forecastDailyDemandTotal</strong> по убыванию. «На WB» и «У пр-ля» — как в supplier-таблице ниже.";
+    }
+  }
+
   function queryParams() {
     const snapshotDate = $("snapshotDate").value;
     const horizonDays = $("horizonDays").value;
@@ -80,12 +137,22 @@
     const targetCoverageDays = $("targetCoverageDays").value;
     const replenishmentMode = $("replenishmentMode").value;
     const ownWarehouseCode = $("ownWarehouseCode").value.trim();
+    const leadTimeDays = String($("leadTimeDays").value || "45").trim();
+    const coverageDays = String($("coverageDays").value || "90").trim();
+    const safetyDays = String(
+      $("safetyDays").value !== "" ? $("safetyDays").value : "0",
+    ).trim();
+    const viewMode = $("viewMode").value;
     const p = new URLSearchParams({
       snapshotDate,
       horizonDays,
       riskStockout,
       targetCoverageDays,
       replenishmentMode,
+      leadTimeDays,
+      coverageDays,
+      safetyDays,
+      viewMode,
     });
     if (warehouseKey) p.set("warehouseKey", warehouseKey);
     if (q) p.set("q", q);
@@ -108,11 +175,21 @@
     const targetCoverageDays = $("targetCoverageDays").value;
     const replenishmentMode = $("replenishmentMode").value;
     const ownWarehouseCode = $("ownWarehouseCode").value.trim();
+    const leadTimeDays = String($("leadTimeDays").value || "45").trim();
+    const coverageDays = String($("coverageDays").value || "90").trim();
+    const safetyDays = String(
+      $("safetyDays").value !== "" ? $("safetyDays").value : "0",
+    ).trim();
+    const viewMode = $("viewMode").value;
     const p = new URLSearchParams({
       snapshotDate,
       horizonDays,
       targetCoverageDays,
       replenishmentMode,
+      leadTimeDays,
+      coverageDays,
+      safetyDays,
+      viewMode,
     });
     if (warehouseKey) p.set("warehouseKey", warehouseKey);
     if (q) p.set("q", q);
@@ -124,11 +201,100 @@
     $("status").textContent = msg || "";
   }
 
+  function fallbackWbCsvName() {
+    const d = $("snapshotDate").value;
+    const h = $("horizonDays").value;
+    return `wb-replenishment-${d}-h${h}.csv`;
+  }
+
+  function fallbackSupplierCsvName() {
+    const d = $("snapshotDate").value;
+    const h = $("horizonDays").value;
+    return `supplier-replenishment-${d}-h${h}.csv`;
+  }
+
+  async function downloadCsv(path, fallbackFilename) {
+    const headers = {
+      Accept: "text/csv,*/*",
+      ...authHeaders(),
+    };
+    let res;
+    try {
+      res = await fetch(path, { headers });
+    } catch (err) {
+      throw humanFetchError(err);
+    }
+    let filename = fallbackFilename;
+    const cd = res.headers.get("Content-Disposition");
+    if (cd) {
+      const m = /filename="([^"]+)"/.exec(cd);
+      if (m) filename = m[1];
+    }
+    if (!res.ok) {
+      const text = await res.text();
+      let msg = res.statusText || "Ошибка экспорта";
+      try {
+        const j = JSON.parse(text);
+        if (j && typeof j.error === "string") msg = j.error;
+      } catch (_) {
+        if (text && text.trim()) msg = text.trim().slice(0, 300);
+      }
+      if (res.status === 401) {
+        msg =
+          "Нужен заголовок авторизации: введите Bearer-токен (FORECAST_UI_TOKEN).";
+      }
+      throw new Error(msg);
+    }
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function downloadWbCsv() {
+    setStatus("Экспорт WB CSV…");
+    try {
+      const p = queryParams();
+      await downloadCsv(`/api/forecast/export-wb?${p}`, fallbackWbCsvName());
+      setStatus("CSV скачан (WB).");
+    } catch (e) {
+      setStatus("Ошибка: " + (e && e.message ? e.message : String(e)));
+    }
+  }
+
+  async function downloadSupplierCsv() {
+    setStatus("Экспорт Supplier CSV…");
+    try {
+      const p = supplierQueryParams();
+      await downloadCsv(`/api/forecast/export-supplier?${p}`, fallbackSupplierCsvName());
+      setStatus("CSV скачан (supplier).");
+    } catch (e) {
+      setStatus("Ошибка: " + (e && e.message ? e.message : String(e)));
+    }
+  }
+
+  function updateExportButtons() {
+    const wb = $("btnExportWbCsv");
+    const sup = $("btnExportSupplierCsv");
+    if (wb) wb.disabled = lastTotalRows === 0;
+    if (sup) sup.disabled = lastSupplierRowCount === 0;
+  }
+
   function renderSummary(data) {
     const el = $("summary");
     const r = data.risk || {};
+    const vm = data.viewMode === "wbWarehouses" ? "wbWarehouses" : "wbTotal";
+    const rowLabel =
+      vm === "wbWarehouses"
+        ? "Всего строк (склад × SKU по фильтру)"
+        : "Всего строк (SKU по сети WB по фильтру)";
     const cells = [
-      cell("Всего строк (по фильтру)", data.totalRows),
+      cell(rowLabel, data.totalRows),
       cell("Critical · запас &lt; 7 дн.", r.critical, "risk-critical"),
       cell("Warning · [7, 14) дн.", r.warning, "risk-warning"),
       cell("Attention · [14, 30) дн.", r.attention, "risk-attention"),
@@ -146,13 +312,11 @@
           "",
         ),
       );
-      cells.push(
-        cell(
-          "Σ на WB (складские строки, network−спрос)",
-          rep.recommendedToWBTotal,
-          "",
-        ),
-      );
+      const wbSumLabel =
+        vm === "wbWarehouses"
+          ? "Σ на WB (по строкам склад×SKU, network−спрос)"
+          : "Σ на WB (SKU по сети, сумма рекомендаций «На WB»)";
+      cells.push(cell(wbSumLabel, rep.recommendedToWBTotal, ""));
       cells.push(
         cell(
           "Σ у производителя (уникальные SKU, см. таблицу ниже)",
@@ -160,12 +324,25 @@
           "",
         ),
       );
+      if (typeof rep.recommendedOrderQtyTotal === "number") {
+        cells.push(
+          cell(
+            "Σ заказ (план lead time + покрытие после прихода)",
+            rep.recommendedOrderQtyTotal,
+            "",
+          ),
+        );
+      }
       if (rep.ownWarehouseCode) {
         cells.push(cell("own warehouse_code", rep.ownWarehouseCode, ""));
       }
     }
+    const staleLabel =
+      vm === "wbWarehouses"
+        ? "Устаревший сток (строк склад×SKU)"
+        : "Устаревший сток (строк SKU по сети)";
     cells.push(
-      cell("Устаревший сток (строк)", data.staleStockRowCount),
+      cell(staleLabel, data.staleStockRowCount),
       cell("Сток snapshot min", data.oldestStockSnapshotAt ?? "—"),
       cell("Сток snapshot max", data.newestStockSnapshotAt ?? "—"),
     );
@@ -190,6 +367,17 @@
       ok: "badge-ok",
     };
     return m[risk] || "badge-ok";
+  }
+
+  /** Крупные латинские метки в первой колонке режима «WB в целом». */
+  function riskLabelWbTotal(risk) {
+    const m = {
+      critical: "CRITICAL",
+      warning: "WARNING",
+      attention: "ATTENTION",
+      ok: "OK",
+    };
+    return m[risk] ?? String(risk ?? "").toUpperCase();
   }
 
   function formatInt(x) {
@@ -231,14 +419,16 @@
       .replace(/"/g, "&quot;");
   }
 
-  function renderRows(rows) {
+  function renderRows(rows, viewMode) {
     lastRows = rows;
     const tb = $("tbody");
-    tb.innerHTML = rows
-      .map((row, idx) => {
-        const inv = row.inventoryLevels;
-        const rep = row.replenishment;
-        return `<tr class="tr-row tr-risk-${row.risk || "ok"}" data-idx="${idx}" tabindex="0" title="Клик — детали расчёта">
+    const vm = viewMode === "wbWarehouses" ? "wbWarehouses" : "wbTotal";
+    if (vm === "wbWarehouses") {
+      tb.innerHTML = rows
+        .map((row, idx) => {
+          const inv = row.inventoryLevels;
+          const rep = row.replenishment;
+          return `<tr class="tr-row tr-risk-${row.risk || "ok"}" data-idx="${idx}" tabindex="0" title="Клик — детали расчёта">
           <td class="risk-cell"><span class="badge ${badgeClass(row.risk)}">${escapeHtml(String(row.risk ?? ""))}</span></td>
           <td class="risk-strip-cell">${riskStripHtml(inv)}</td>
           <td>${escapeHtml(row.warehouseNameRaw || row.warehouseKey || "")}</td>
@@ -252,8 +442,30 @@
           <td>${formatInt(rep ? rep.recommendedToWB : null)}</td>
           <td>${escapeHtml(String(row.stockSnapshotAt ?? ""))}</td>
         </tr>`;
-      })
-      .join("");
+        })
+        .join("");
+    } else {
+      tb.innerHTML = rows
+        .map((row, idx) => {
+          const inv = row.inventoryLevels;
+          const rep = row.replenishment;
+          return `<tr class="tr-row tr-risk-${row.risk || "ok"}" data-idx="${idx}" tabindex="0" title="Клик — детали по SKU (сеть WB)">
+          <td class="risk-cell risk-cell-wb-total"><span class="badge badge-wb-total ${badgeClass(row.risk)}">${escapeHtml(riskLabelWbTotal(row.risk))}</span></td>
+          <td class="col-vendor-wb-total">${escapeHtml(String(row.vendorCode ?? ""))}</td>
+          <td>${escapeHtml(String(row.nmId ?? ""))}</td>
+          <td>${escapeHtml(String(row.techSize ?? ""))}</td>
+          <td>${formatInt(row.wbAvailableTotal)}</td>
+          <td>${formatInt(row.ownStock)}</td>
+          <td>${formatInt(inv ? inv.systemAvailable : null)}</td>
+          <td>${formatNum(row.daysOfStockWB)}</td>
+          <td>${formatNum(row.forecastDailyDemandTotal)}</td>
+          <td>${formatInt(rep ? rep.recommendedToWB : null)}</td>
+          <td>${formatInt(row.recommendedFromSupplier)}</td>
+          <td>${escapeHtml(String(row.stockoutDateWB ?? ""))}</td>
+        </tr>`;
+        })
+        .join("");
+    }
     $("detailPanel").hidden = false;
     $("detailHint").hidden = false;
     $("detailDl").innerHTML = "";
@@ -272,6 +484,35 @@
       return;
     }
     $("detailHint").hidden = true;
+    if (row.viewKind === "wbTotal") {
+      const inv = row.inventoryLevels;
+      const rep = row.replenishment;
+      const pairs = [
+        ["Режим строки", "WB в целом (одна строка на SKU по сети)"],
+        ["Bucket риска (по дням запаса WB, сеть)", row.risk],
+        ["nm_id", row.nmId],
+        ["Размер", row.techSize],
+        ["vendor_code", row.vendorCode],
+        ["WB ∑ доступно (start+incoming по сети)", formatInt(row.wbAvailableTotal)],
+        ["Спрос/день Σ по сети", formatNum(row.forecastDailyDemandTotal)],
+        ["Дней запаса WB (сеть)", formatNum(row.daysOfStockWB)],
+        ["Дата OOS (MIN по складам)", row.stockoutDateWB ?? "—"],
+        ["Сток snapshot (MIN по складам)", row.stockSnapshotAtWB ?? "—"],
+        ["ownStock", formatInt(row.ownStock)],
+        ["systemAvailable", formatInt(inv ? inv.systemAvailable : null)],
+        ["Рекомендация на WB (сеть)", formatInt(rep ? rep.recommendedToWB : null)],
+        ["Рекомендация у производителя (SKU)", formatInt(row.recommendedFromSupplier)],
+      ];
+      $("detailDl").innerHTML = pairs
+        .map(
+          ([k, v]) =>
+            `<dt>${escapeHtml(k)}</dt><dd>${
+              typeof v === "number" ? formatDetailVal(v) : escapeHtml(String(v))
+            }</dd>`,
+        )
+        .join("");
+      return;
+    }
     const pairs = [
       ["Bucket риска", row.risk],
       ["Склад (как в WB)", row.warehouseNameRaw || row.warehouseKey],
@@ -370,11 +611,19 @@
           <td>${escapeHtml(String(r.techSize ?? ""))}</td>
           <td>${escapeHtml(String(r.vendorCode ?? ""))}</td>
           <td>${formatNum(r.sumForecastDailyDemand)}</td>
+          <td>${
+            r.daysUntilStockout == null || Number.isNaN(r.daysUntilStockout)
+              ? "—"
+              : formatNum(r.daysUntilStockout)
+          }</td>
           <td>${formatInt(r.targetDemandSystem)}</td>
           <td>${formatInt(r.wbAvailableTotal)}</td>
           <td>${formatInt(r.ownStock)}</td>
           <td>${formatInt(r.systemAvailable)}</td>
           <td><strong>${formatInt(r.recommendedFromSupplier)}</strong></td>
+          <td>${formatNum(r.stockAtArrival)}</td>
+          <td><strong>${formatInt(r.recommendedOrderQty)}</strong></td>
+          <td>${r.willStockoutBeforeArrival ? '<span class="badge badge-critical">да</span>' : "нет"}</td>
         </tr>`,
       )
       .join("");
@@ -403,11 +652,18 @@
     } catch (_) {
       /* таблица SKU — опционально */
     }
-    renderSummary(sum);
+    const viewMode =
+      rowsPayload.viewMode === "wbWarehouses" ? "wbWarehouses" : "wbTotal";
+    renderTableHeader(viewMode);
+    updateMainTableHint(viewMode);
+    renderSummary({ ...sum, viewMode });
     const list = rowsPayload.rows || [];
-    renderRows(list);
+    renderRows(list, viewMode);
     renderSupplierRows(supPayload.rows);
     const total = sum.totalRows ?? 0;
+    lastTotalRows = total;
+    lastSupplierRowCount = (supPayload.rows || []).length;
+    updateExportButtons();
     const shown = list.length;
     const limit = rowsPayload.limit ?? shown;
     let msg = `OK · в таблице ${shown} строк`;
@@ -461,6 +717,8 @@
   }
 
   $("snapshotDate").value = todayYmd();
+  renderTableHeader($("viewMode").value);
+  updateMainTableHint($("viewMode").value);
 
   $("btnRefresh").addEventListener("click", () => {
     loadWarehouses()
@@ -470,7 +728,27 @@
   $("btnRecalculate").addEventListener("click", () => {
     recalculate().catch(() => {});
   });
-  ["snapshotDate", "horizonDays", "warehouseKey", "q", "rowLimit", "riskStockout", "targetCoverageDays", "replenishmentMode", "ownWarehouseCode"].forEach((id) => {
+  $("btnExportWbCsv").addEventListener("click", () => {
+    downloadWbCsv();
+  });
+  $("btnExportSupplierCsv").addEventListener("click", () => {
+    downloadSupplierCsv();
+  });
+  [
+    "snapshotDate",
+    "horizonDays",
+    "warehouseKey",
+    "q",
+    "rowLimit",
+    "riskStockout",
+    "targetCoverageDays",
+    "replenishmentMode",
+    "ownWarehouseCode",
+    "leadTimeDays",
+    "coverageDays",
+    "safetyDays",
+    "viewMode",
+  ].forEach((id) => {
     $(id).addEventListener("change", () => {
       loadWarehouses()
         .then(loadTable)

@@ -27,6 +27,13 @@
         </select>
       </label>
       <label>
+        Вид основной таблицы WB
+        <select id="viewMode" title="WB в целом — одна строка на артикул×размер по сети; по складам — классический warehouse×SKU">
+          <option value="wbTotal" selected>WB в целом</option>
+          <option value="wbWarehouses">По складам WB</option>
+        </select>
+      </label>
+      <label>
         Склад
         <select id="warehouseKey">
           <option value="">Все</option>
@@ -82,6 +89,8 @@
       <div class="actions">
         <button type="button" id="btnRefresh">Обновить таблицу</button>
         <button type="button" id="btnRecalculate" class="primary">Пересчитать срез</button>
+        <button type="button" id="btnExportWbCsv" title="Полный экспорт по фильтру (все строки, не только лимит таблицы)">Скачать WB CSV</button>
+        <button type="button" id="btnExportSupplierCsv" title="Один ряд на SKU; параметры как у таблицы закупки">Скачать Supplier CSV</button>
         <span id="status" class="muted" aria-live="polite"></span>
       </div>
     </div>
@@ -94,27 +103,28 @@
 
   <section class="panel">
     <h2>Строки прогноза</h2>
-    <p class="muted table-hint">
-      Сортировка: сначала меньше дней запаса, затем выше спрос. System = все WB + наш склад (own CSV);
-      WB ∑ = сумма по сети WB; WB лок. = этот склад. S/W/L — риск по уровням (красный / оранжевый / жёлтый).
-      Колонка «На WB» — read-side довоз в сеть; закупка у производителя — только в отдельной таблице ниже.
+    <p class="muted table-hint" id="mainTableHint">
+      <span id="mainTableHintText">
+        Режим по умолчанию: <strong>WB в целом</strong> — первая колонка: бакет риска (сеть), затем vendor; сортировка: daysOfStockWB по возрастанию, затем forecastDailyDemandTotal по убыванию.
+        «На WB» и «У пр-ля» — read-side; детали закупки — в таблице ниже.
+      </span>
     </p>
     <div class="table-wrap">
-      <table id="grid">
-        <thead>
+      <table id="grid" class="grid-wb-total">
+        <thead id="gridThead">
           <tr>
-            <th>Risk</th>
-            <th title="Система · WB · локальный склад">Риск<br/>уровней</th>
-            <th>Склад WB</th>
+            <th class="th-risk-wb-total" scope="col" title="Бакет риска по дням запаса WB (агрегат сети)">Риск</th>
+            <th class="th-vendor-wb-total" scope="col" title="vendor_code">vendor</th>
             <th>nm_id</th>
-            <th>vendor</th>
-            <th>Дней запаса</th>
-            <th>Спрос/день</th>
-            <th title="Наш склад + все WB">System</th>
-            <th title="Сумма по складам WB">WB ∑</th>
-            <th title="Этот склад WB">WB лок.</th>
-            <th title="Склад: max(0, спрос×дни − WB∑)">На WB</th>
-            <th>Сток снимок</th>
+            <th>Размер</th>
+            <th title="Сумма (start_stock + incoming) по всем складам WB">WB ∑</th>
+            <th title="Наш склад (own CSV)">Own</th>
+            <th title="WB∑ + own">System</th>
+            <th title="Покрытие по сети: WB∑ / Σ спрос">Дн. WB</th>
+            <th title="Σ forecast_daily_demand по сети">Спрос/день Σ</th>
+            <th title="max(0, спрос×дни − WB∑ по сети)">На WB</th>
+            <th title="Та же формула, что в блоке закупки">У пр-ля</th>
+            <th title="MIN(stockout_date) по складам">OOS (WB)</th>
           </tr>
         </thead>
         <tbody id="tbody"></tbody>
@@ -122,12 +132,32 @@
     </div>
   </section>
 
+  <section class="panel detail-panel" id="detailPanel" hidden>
+    <h2>Детали строки</h2>
+    <p class="muted" id="detailHint">Выберите строку в таблице прогноза выше.</p>
+    <dl id="detailDl" class="detail-dl"></dl>
+  </section>
+
   <section class="panel" id="supplierPanel">
     <h2>Закупка у производителя (по SKU)</h2>
     <p class="muted table-hint">
-      Одна строка на артикул × размер: спрос и остаток WB — <strong>сумма по всем складам</strong> сети; заказ у поставщика — от дефицита общего пула (не суммируйте с колонкой «На WB»).
+      Ниже деталей выбранной строки: одна строка на артикул × размер; спрос и остаток WB — <strong>сумма по всем складам</strong> сети; заказ у поставщика — от дефицита общего пула (не суммируйте с колонкой «На WB»).
       Фильтры склада и поиска применяются к списку SKU (без фильтра «Риск окончания»).
     </p>
+    <div class="row supplier-plan-controls">
+      <label>
+        Lead time (дней до прихода)
+        <input type="number" id="leadTimeDays" min="1" max="365" value="45" step="1" title="Расход за lead time: systemDailyDemand × leadTimeDays" />
+      </label>
+      <label>
+        Покрытие после прихода (дней)
+        <input type="number" id="coverageDays" min="1" max="730" value="90" step="1" title="Целевой запас после прихода: отдельно от «Целевого покрытия» для колонки «Заказать»" />
+      </label>
+      <label>
+        Safety (дней)
+        <input type="number" id="safetyDays" min="0" max="365" value="0" step="1" title="Добавляется к покрытию: спрос × (coverage + safety)" />
+      </label>
+    </div>
     <div class="table-wrap">
       <table id="supplierGrid" class="supplier-grid">
         <thead>
@@ -136,22 +166,20 @@
             <th>Размер</th>
             <th>vendor</th>
             <th>Σ спрос/день</th>
+            <th title="systemAvailableNow / Σспрос при спросе &gt; 0">Дней до OOS</th>
             <th>target×дни</th>
             <th>WB ∑</th>
             <th>Own</th>
             <th>System</th>
             <th>Заказать</th>
+            <th title="Запас к моменту прихода: WB∑+own − спрос×lead">Запас к приходу</th>
+            <th title="max(0, ceil(спрос×coverage − запас к приходу))">Заказ (LT)</th>
+            <th title="Запас к приходу &lt; 0">Риск до прихода</th>
           </tr>
         </thead>
         <tbody id="supplierTbody"></tbody>
       </table>
     </div>
-  </section>
-
-  <section class="panel detail-panel" id="detailPanel" hidden>
-    <h2>Детали строки</h2>
-    <p class="muted" id="detailHint">Выберите строку в таблице выше.</p>
-    <dl id="detailDl" class="detail-dl"></dl>
   </section>
 
   <script src="/static/app.js" defer></script>

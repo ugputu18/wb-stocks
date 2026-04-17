@@ -1,0 +1,4 @@
+---
+alwaysApply: true
+---
+After completing any non-trivial feature task, update or create a relevant task file under `docs/ai-tasks/` describing what was implemented, key decisions, and how to run it.

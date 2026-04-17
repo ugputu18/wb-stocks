@@ -12,6 +12,7 @@
     "import:own-stocks": "node --env-file=.env --import tsx scripts/import-own-warehouse-state.ts",
     "update:wb-supplies": "node --env-file=.env --import tsx scripts/update-wb-supplies.ts",
     "forecast:sales-mvp": "node --env-file=.env --import tsx scripts/run-sales-forecast-mvp.ts",
+    "serve:forecast-ui": "node --env-file=.env --import tsx scripts/serve-forecast-ui.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

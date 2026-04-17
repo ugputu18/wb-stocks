@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WB forecast — MVP</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="top">
+    <h1>WB sales forecast (MVP)</h1>
+    <p class="muted">Локальный просмотр среза по одному горизонту. Пересчёт через тот же пайплайн, что и CLI.</p>
+  </header>
+
+  <section class="panel controls">
+    <div class="row">
+      <label>
+        Дата среза (snapshot)
+        <input type="date" id="snapshotDate" />
+      </label>
+      <label>
+        Горизонт, дней
+        <select id="horizonDays">
+          <option value="30">30</option>
+          <option value="60">60</option>
+          <option value="90">90</option>
+        </select>
+      </label>
+      <label>
+        Склад
+        <select id="warehouseKey">
+          <option value="">Все</option>
+        </select>
+      </label>
+      <label>
+        Риск окончания (фильтр по дням запаса)
+        <select id="riskStockout" title="Узкая выборка по daysOfStock; KPI считается по тем же строкам, что и таблица">
+          <option value="all">Все</option>
+          <option value="lt7">Меньше 7 дней</option>
+          <option value="lt14">Меньше 14 дней</option>
+          <option value="lt30">Меньше 30 дней</option>
+        </select>
+      </label>
+      <label>
+        Режим рекомендаций
+        <select id="replenishmentMode" title="Какой сценарий подсвечивать в KPI (оба столбца в таблице всегда заполнены)">
+          <option value="wb" selected>Поставки на WB</option>
+          <option value="supplier">Закупка у производителя</option>
+        </select>
+      </label>
+      <label>
+        Целевое покрытие (дней)
+        <select id="targetCoverageDays" title="targetDemand = спрос/день × дни; отдельно для WB и system">
+          <option value="30" selected>30</option>
+          <option value="45">45</option>
+          <option value="60">60</option>
+        </select>
+      </label>
+      <label>
+        Код «нашего» склада (own CSV)
+        <input type="text" id="ownWarehouseCode" placeholder="main" maxlength="32" title="own_stock_snapshots.warehouse_code, по умолчанию main" />
+      </label>
+      <label>
+        Строк в таблице (max)
+        <select id="rowLimit" title="Сервер отдаёт не больше N строк в ответе (остальное — через фильтры)">
+          <option value="250">250</option>
+          <option value="500" selected>500</option>
+          <option value="1000">1000</option>
+          <option value="2000">2000</option>
+        </select>
+      </label>
+      <label class="grow">
+        Поиск (vendor / nm_id)
+        <input type="search" id="q" placeholder="например SKU-1 или 12345" autocomplete="off" />
+      </label>
+    </div>
+    <div class="row">
+      <label>
+        Bearer для API (если задан <code>FORECAST_UI_TOKEN</code>)
+        <input type="password" id="apiToken" placeholder="только в памяти вкладки, без localStorage" autocomplete="off" />
+      </label>
+      <div class="actions">
+        <button type="button" id="btnRefresh">Обновить таблицу</button>
+        <button type="button" id="btnRecalculate" class="primary">Пересчитать срез</button>
+        <span id="status" class="muted" aria-live="polite"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="summaryBox">
+    <h2>Сводка KPI</h2>
+    <div id="summary" class="summary-grid"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Строки прогноза</h2>
+    <p class="muted table-hint">
+      Сортировка: сначала меньше дней запаса, затем выше спрос. System = все WB + наш склад (own CSV);
+      WB ∑ = сумма по сети WB; WB лок. = этот склад. S/W/L — риск по уровням (красный / оранжевый / жёлтый).
+      Колонка «На WB» — read-side довоз в сеть; закупка у производителя — только в отдельной таблице ниже.
+    </p>
+    <div class="table-wrap">
+      <table id="grid">
+        <thead>
+          <tr>
+            <th>Risk</th>
+            <th title="Система · WB · локальный склад">Риск<br/>уровней</th>
+            <th>Склад WB</th>
+            <th>nm_id</th>
+            <th>vendor</th>
+            <th>Дней запаса</th>
+            <th>Спрос/день</th>
+            <th title="Наш склад + все WB">System</th>
+            <th title="Сумма по складам WB">WB ∑</th>
+            <th title="Этот склад WB">WB лок.</th>
+            <th title="Склад: max(0, спрос×дни − WB∑)">На WB</th>
+            <th>Сток снимок</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="supplierPanel">
+    <h2>Закупка у производителя (по SKU)</h2>
+    <p class="muted table-hint">
+      Одна строка на артикул × размер: спрос и остаток WB — <strong>сумма по всем складам</strong> сети; заказ у поставщика — от дефицита общего пула (не суммируйте с колонкой «На WB»).
+      Фильтры склада и поиска применяются к списку SKU (без фильтра «Риск окончания»).
+    </p>
+    <div class="table-wrap">
+      <table id="supplierGrid" class="supplier-grid">
+        <thead>
+          <tr>
+            <th>nm_id</th>
+            <th>Размер</th>
+            <th>vendor</th>
+            <th>Σ спрос/день</th>
+            <th>target×дни</th>
+            <th>WB ∑</th>
+            <th>Own</th>
+            <th>System</th>
+            <th>Заказать</th>
+          </tr>
+        </thead>
+        <tbody id="supplierTbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel detail-panel" id="detailPanel" hidden>
+    <h2>Детали строки</h2>
+    <p class="muted" id="detailHint">Выберите строку в таблице выше.</p>
+    <dl id="detailDl" class="detail-dl"></dl>
+  </section>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

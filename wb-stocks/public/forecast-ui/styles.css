@@ -1,0 +1,295 @@
+:root {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  line-height: 1.4;
+  color: #e8eaed;
+  background: #121317;
+}
+
+body {
+  margin: 0 auto;
+  max-width: 1200px;
+  padding: 1rem 1.25rem 3rem;
+}
+
+h1 {
+  font-size: 1.25rem;
+  margin: 0 0 0.25rem;
+}
+
+h2 {
+  font-size: 1rem;
+  margin: 0 0 0.75rem;
+}
+
+.muted {
+  color: #8b919a;
+  font-size: 0.9rem;
+}
+
+.top p {
+  margin: 0;
+}
+
+.panel {
+  background: #1a1c22;
+  border: 1px solid #2a2d36;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.controls .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+.controls .row:last-child {
+  margin-bottom: 0;
+}
+
+.controls .grow {
+  flex: 1;
+  min-width: 200px;
+}
+
+input,
+select,
+button {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #3d424d;
+  background: #0f1014;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button.primary {
+  background: #2f6feb;
+  border-color: #2f6feb;
+  color: #fff;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.5rem;
+}
+
+.summary-grid .cell {
+  background: #121317;
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #2a2d36;
+}
+
+.summary-grid .cell strong {
+  display: block;
+  font-size: 1.25rem;
+}
+
+.table-wrap {
+  overflow: auto;
+  max-height: 70vh;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid #2a2d36;
+  white-space: nowrap;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  background: #1a1c22;
+  z-index: 1;
+}
+
+tbody tr:hover {
+  background: #22252d;
+}
+
+.tr-row {
+  cursor: pointer;
+}
+
+tbody tr.tr-selected {
+  background: #2a3244 !important;
+}
+
+.table-hint {
+  margin: 0 0 0.75rem;
+  max-width: 52rem;
+}
+
+.detail-panel {
+  margin-top: 1rem;
+}
+
+.detail-dl {
+  display: grid;
+  grid-template-columns: minmax(200px, 280px) 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.detail-dl dt {
+  margin: 0;
+  color: #8b919a;
+}
+
+.detail-dl dd {
+  margin: 0;
+}
+
+.risk-critical {
+  color: #f87171;
+}
+.risk-warning {
+  color: #fbbf24;
+}
+.risk-attention {
+  color: #a3e635;
+}
+.risk-ok {
+  color: #4ade80;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.badge-critical {
+  background: #3f1e1e;
+  color: #fca5a5;
+}
+
+.badge-warning {
+  background: #3d3318;
+  color: #fde047;
+}
+
+.badge-attention {
+  background: #263419;
+  color: #bef264;
+}
+
+.badge-ok {
+  background: #153527;
+  color: #86efac;
+}
+
+tbody tr.tr-risk-critical {
+  box-shadow: inset 3px 0 0 #f87171;
+}
+
+tbody tr.tr-risk-warning {
+  box-shadow: inset 3px 0 0 #fbbf24;
+}
+
+tbody tr.tr-risk-attention {
+  box-shadow: inset 3px 0 0 #a3e635;
+}
+
+tbody tr.tr-risk-ok {
+  box-shadow: inset 3px 0 0 #22c55e;
+}
+
+.risk-cell {
+  white-space: nowrap;
+}
+
+.risk-strip-cell {
+  white-space: nowrap;
+  font-size: 0.75rem;
+  vertical-align: middle;
+}
+
+.risk-strip {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.risk-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 2px;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #6b7280;
+  background: #2a2d36;
+}
+
+.risk-dot.risk-sys.on {
+  color: #fff;
+  background: #dc2626;
+}
+
+.risk-dot.risk-wb.on {
+  color: #111;
+  background: #f97316;
+}
+
+.risk-dot.risk-loc.on {
+  color: #111;
+  background: #eab308;
+}
+
+.reg-def {
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  background: #422006;
+  color: #fdba74;
+}
+
+code {
+  font-size: 0.85em;
+}

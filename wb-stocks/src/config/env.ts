@@ -20,6 +20,11 @@ const envSchema = z.object({
   LOG_LEVEL: z
     .enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"])
     .default("info"),
+  /** Local-only forecast UI server (see `pnpm serve:forecast-ui`). */
+  FORECAST_UI_HOST: z.string().min(1).default("127.0.0.1"),
+  FORECAST_UI_PORT: z.coerce.number().int().positive().default(3847),
+  /** If set, JSON API requires `Authorization: Bearer <FORECAST_UI_TOKEN>`. */
+  FORECAST_UI_TOKEN: z.string().min(1).optional(),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

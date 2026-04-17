@@ -33,6 +33,7 @@
 | Собственный склад | CSV `store/our<MMDD>.csv` | `importOwnWarehouseState` | `pnpm import:own-stocks` |
 | WB поставки FBW | WB FBW Supplies API (3 эндпойнта) | `importWbSupplies` | `pnpm update:wb-supplies` |
 | WB sales forecast MVP | orders + demand snapshot + stocks + supplies | `runSalesForecastMvp` | `pnpm forecast:sales-mvp` |
+| Локальный forecast UI (MVP) | статика + JSON, тот же `runSalesForecastMvp` на пересчёт | `startForecastUiServer` | `pnpm serve:forecast-ui` |
 
 Имя `wb-stocks` оставлено историческим — WB был первым источником. Сейчас
 модуль умышленно объединяет **несколько источников остатков в одной базе**,
@@ -57,6 +58,7 @@
 │   scripts/import-own-warehouse-state.ts (own warehouse)         │
 │   scripts/update-wb-supplies.ts      (WB supplies)              │
 │   scripts/run-sales-forecast-mvp.ts  (forecast happy path)      │
+│   scripts/serve-forecast-ui.ts       (local thin UI + JSON API) │
 └────────────┬────────────────────────────────────────────────────┘
              │  loadConfig + openDatabase + new Client + Repository
              │  → use case
@@ -801,3 +803,5 @@ pnpm typecheck       # tsc --noEmit
   целых полных дней покрытия.
 - `--dry-run` для CLI реализован через SQLite savepoint + rollback:
   команда честно считает весь pipeline, но не оставляет следов в БД.
+
+**Локальный forecast UI** (`pnpm serve:forecast-ui`, см. `docs/forecast-ui.md`): чтение `wb_forecast_snapshots` + `own_stock_snapshots`, pipeline не трогаем. **WB replenishment = warehouse-level** (`recommendedToWB` на каждую строку `warehouse_key × sku`). **Supplier replenishment = sku-level** (`nm_id` + `tech_size`): отдельный endpoint `GET /api/forecast/supplier-replenishment` — **одна строка на SKU**, закупка у производителя от суммарного спроса и общего пула; `recommendedFromSupplierTotal` в summary = сумма по этой витрине, **не** по строкам складской таблицы и **не** зависит от числа складов на артикул.

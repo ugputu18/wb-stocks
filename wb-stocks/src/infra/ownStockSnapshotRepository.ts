@@ -1,5 +1,6 @@
 import type { DbHandle } from "./db.js";
 import type { OwnStockSnapshotRecord } from "../domain/ownStockSnapshot.js";
+import { DEFAULT_WAREHOUSE_CODE } from "../domain/ownStockSnapshot.js";
 
 /**
  * Idempotency model: **replace-for-date**.
@@ -15,6 +16,28 @@ import type { OwnStockSnapshotRecord } from "../domain/ownStockSnapshot.js";
  */
 export class OwnStockSnapshotRepository {
   constructor(private readonly db: DbHandle) {}
+
+  /**
+   * Vendor → quantity for one calendar snapshot and physical warehouse
+   * (`own_stock_snapshots` key). Used by forecast UI (read-side system level).
+   */
+  quantitiesByVendor(
+    snapshotDate: string,
+    warehouseCode: string = DEFAULT_WAREHOUSE_CODE,
+  ): Map<string, number> {
+    const rows = this.db
+      .prepare(
+        `SELECT vendor_code AS v, quantity AS q
+           FROM own_stock_snapshots
+          WHERE snapshot_date = ? AND warehouse_code = ?`,
+      )
+      .all(snapshotDate, warehouseCode) as { v: string; q: number }[];
+    const m = new Map<string, number>();
+    for (const r of rows) {
+      m.set(String(r.v).trim(), Number(r.q));
+    }
+    return m;
+  }
 
   countForDate(snapshotDate: string, warehouseCode: string): number {
     const row = this.db

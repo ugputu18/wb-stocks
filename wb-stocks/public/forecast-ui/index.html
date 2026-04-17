@@ -16,10 +16,12 @@
     <div class="row">
       <label>
         Дата среза (snapshot)
+        <span class="help" title="Календарная дата среза прогноза (snapshot_date): к ней привязаны симуляция спроса и снимки остатков.">ⓘ</span>
         <input type="date" id="snapshotDate" />
       </label>
       <label>
         Горизонт, дней
+        <span class="help" title="Длина горизонта в днях (horizon_days): на сколько дней вперёд считаются прогноз, поставки и дни запаса.">ⓘ</span>
         <select id="horizonDays">
           <option value="30">30</option>
           <option value="60">60</option>
@@ -28,6 +30,7 @@
       </label>
       <label>
         Вид основной таблицы WB
+        <span class="help" title="WB в целом — одна строка на артикул×размер по сети WB; по складам — строка на каждую пару склад × SKU.">ⓘ</span>
         <select id="viewMode" title="WB в целом — одна строка на артикул×размер по сети; по складам — классический warehouse×SKU">
           <option value="wbTotal" selected>WB в целом</option>
           <option value="wbWarehouses">По складам WB</option>
@@ -41,6 +44,7 @@
       </label>
       <label>
         Риск окончания (фильтр по дням запаса)
+        <span class="help" title="Сужает выборку по дням запаса (days_of_stock или агрегат в режиме WB в целом). KPI считаются по тем же строкам, что и таблица.">ⓘ</span>
         <select id="riskStockout" title="Узкая выборка по daysOfStock; KPI считается по тем же строкам, что и таблица">
           <option value="all">Все</option>
           <option value="lt7">Меньше 7 дней</option>
@@ -57,6 +61,7 @@
       </label>
       <label>
         Целевое покрытие (дней)
+        <span class="help" title="Целевой горизонт для простых рекомендаций: targetDemand ≈ спрос/день × эти дни (отдельно для WB и для общего пула).">ⓘ</span>
         <select id="targetCoverageDays" title="targetDemand = спрос/день × дни; отдельно для WB и system">
           <option value="30" selected>30</option>
           <option value="45">45</option>
@@ -118,15 +123,15 @@
             <th class="th-vendor-wb-total" scope="col" title="vendor_code">vendor</th>
             <th>nm_id</th>
             <th>Размер</th>
-            <th title="Сумма (start_stock + incoming) по всем складам WB">WB ∑</th>
-            <th title="Наш склад (own CSV)">Own</th>
-            <th title="WB∑ + own">System</th>
-            <th title="Покрытие по сети: WB∑ / Σ спрос">Дн. WB</th>
-            <th title="Σ forecast_daily_demand по сети">Спрос/день Σ</th>
-            <th title="max(0, спрос×дни − WB∑ по сети)">На WB</th>
-            <th title="Та же формула, что в блоке закупки">У пр-ля</th>
-            <th title="MIN(stockout_date) по складам">OOS (WB)</th>
-            <th class="th-drill-wb-total" scope="col" title="Быстрый переход к строкам по складам для этого SKU">Склады</th>
+            <th title="Сумма доступного на WB по сети: start_stock + incoming_units по всем складам для этого SKU.">WB ∑</th>
+            <th title="Остаток на нашем складе из own CSV (vendor_code → quantity).">Own</th>
+            <th title="Общий пул: WB∑ по сети + own; база для «системного» риска и закупки у поставщика.">System</th>
+            <th title="Дней покрытия по сети WB: WB∑ / Σ спроса в день (агрегат); при нулевом спросе — особые правила в домене.">Дн. WB</th>
+            <th title="Сумма прогнозных продаж в день (forecast_daily_demand) по всем складам WB для артикула×размера.">Спрос/день Σ</th>
+            <th title="Рекомендуемый довоз на WB: max(0, ceil(спрос×целевые дни − WB∑ по сети)) при выбранном targetCoverageDays.">На WB</th>
+            <th title="Рекомендация закупки у производителя для SKU (тот же пул system, что и в таблице закупки ниже).">У пр-ля</th>
+            <th title="Ранняя дата исчерпания по складам: MIN(stockout_date) в срезе; не фактическая дата отгрузки.">OOS (WB)</th>
+            <th class="th-drill-wb-total" scope="col" title="Переключить вид на склады и отфильтровать этот nm_id (+ tech_size в URL); удобный drilldown.">Склады</th>
           </tr>
         </thead>
         <tbody id="tbody"></tbody>
@@ -149,14 +154,17 @@
     <div class="row supplier-plan-controls">
       <label>
         Lead time (дней до прихода)
+        <span class="help" title="Срок до прихода партии от поставщика: расход за этот период (спрос × lead time) участвует в «Запас к приходу» и «Заказ (LT)».">ⓘ</span>
         <input type="number" id="leadTimeDays" min="1" max="365" value="45" step="1" title="Расход за lead time: systemDailyDemand × leadTimeDays" />
       </label>
       <label>
         Покрытие после прихода (дней)
+        <span class="help" title="Желаемый запас в днях спроса после прихода партии — отдельно от «Целевого покрытия» для колонок «На WB» / «Заказать» (простой режим).">ⓘ</span>
         <input type="number" id="coverageDays" min="1" max="730" value="90" step="1" title="Целевой запас после прихода: отдельно от «Целевого покрытия» для колонки «Заказать»" />
       </label>
       <label>
         Safety (дней)
+        <span class="help" title="Дополнительные дни к покрытию после прихода: в целевом спросе после прихода учитывается coverage + safety.">ⓘ</span>
         <input type="number" id="safetyDays" min="0" max="365" value="0" step="1" title="Добавляется к покрытию: спрос × (coverage + safety)" />
       </label>
     </div>
@@ -174,9 +182,9 @@
             <th>Own</th>
             <th>System</th>
             <th>Заказать</th>
-            <th title="Запас к моменту прихода: WB∑+own − спрос×lead">Запас к приходу</th>
-            <th title="max(0, ceil(спрос×coverage − запас к приходу))">Заказ (LT)</th>
-            <th title="Запас к приходу &lt; 0">Риск до прихода</th>
+            <th title="Ожидаемый запас системы к моменту прихода партии: WB∑ + own − (суммарный спрос/день × lead time). Не путать с колонкой «Заказать» (простая рекомендация).">Запас к приходу</th>
+            <th title="Размер заказа с учётом lead time и покрытия после прихода: max(0, ceil(целевой запас после прихода − запас к приходу)); план read-side, не MOQ.">Заказ (LT)</th>
+            <th title="Проекция: запас к приходу отрицательный — к прибытию партии не хватит покрытия спроса за lead time.">Риск до прихода</th>
           </tr>
         </thead>
         <tbody id="supplierTbody"></tbody>

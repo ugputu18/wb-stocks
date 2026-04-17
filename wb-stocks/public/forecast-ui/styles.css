@@ -403,3 +403,15 @@ tbody tr.tr-risk-ok {
 code {
   font-size: 0.85em;
 }
+
+.help {
+  cursor: help;
+  opacity: 0.6;
+  margin-left: 4px;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.help:hover {
+  opacity: 1;
+}

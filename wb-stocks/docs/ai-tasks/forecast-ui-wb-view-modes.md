@@ -22,4 +22,8 @@ pnpm serve:forecast-ui
 
 ## Дополнение: drilldown wb total → склады
 
-В таблице `wbTotal` клик по vendor / nm_id / размеру или кнопка «По складам» вызывает `drillDownToWarehousesFromWbTotal`: `viewMode=wbWarehouses`, `q=nm_id`, `techSize` в скрытом поле, запросы как к обычному API.
+В таблице `wbTotal` клик по vendor / nm_id / размеру или кнопка «По складам» вызывает `drillDownToWarehousesFromWbTotal`: `viewMode=wbWarehouses`, `q=nm_id`, `techSize` в скрытом поле, затем **`history.pushState`** и загрузка данных.
+
+## URL state (replaceState / popstate)
+
+После успешного `loadTable` вызывается **`history.replaceState`** с query, собранным из формы (совпадает с параметрами API). Drilldown — **`pushState`**. При загрузке и при `popstate` вызывается **`applyFormFromUrl()`**.

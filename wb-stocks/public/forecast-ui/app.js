@@ -7,6 +7,14 @@
   let lastTotalRows = 0;
   let lastSupplierRowCount = 0;
 
+  /** Склад из URL — применяется один раз при следующем `loadWarehouses` (опции ещё не построены). */
+  let pendingWarehouseKeyFromUrl = null;
+
+  const ALLOWED_HORIZON = new Set(["30", "60", "90"]);
+  const ALLOWED_LIMIT = new Set(["250", "500", "1000", "2000"]);
+  const ALLOWED_RISK = new Set(["all", "lt7", "lt14", "lt30"]);
+  const ALLOWED_TARGET_COV = new Set(["30", "45", "60"]);
+
   function todayYmd() {
     const d = new Date();
     const y = d.getUTCFullYear();
@@ -73,20 +81,119 @@
     return data;
   }
 
+  function parseViewModeParam(raw) {
+    const t = (raw ?? "").trim().toLowerCase();
+    if (t === "wbwarehouses" || t === "warehouses" || t === "by-warehouse") {
+      return "wbWarehouses";
+    }
+    return "wbTotal";
+  }
+
+  function clampIntStr(raw, min, max, fallback) {
+    const n = Number(String(raw ?? "").trim());
+    if (!Number.isInteger(n) || n < min || n > max) return String(fallback);
+    return String(n);
+  }
+
+  /**
+   * Восстанавливает поля формы из `window.location.search`.
+   * Невалидные значения → текущие дефолты UI (как до синхронизации URL).
+   */
+  function applyFormFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+
+    const sd = params.get("snapshotDate")?.trim();
+    if (sd && /^\d{4}-\d{2}-\d{2}$/.test(sd)) {
+      $("snapshotDate").value = sd;
+    } else {
+      $("snapshotDate").value = todayYmd();
+    }
+
+    const h = params.get("horizonDays")?.trim();
+    $("horizonDays").value = ALLOWED_HORIZON.has(h) ? h : "30";
+
+    $("viewMode").value = parseViewModeParam(params.get("viewMode"));
+
+    const wkParam = params.get("warehouseKey");
+    pendingWarehouseKeyFromUrl = wkParam !== null ? wkParam.trim() : null;
+
+    const r = params.get("riskStockout")?.trim();
+    $("riskStockout").value = ALLOWED_RISK.has(r) ? r : "all";
+
+    $("replenishmentMode").value =
+      params.get("replenishmentMode")?.trim() === "supplier" ? "supplier" : "wb";
+
+    const tc = params.get("targetCoverageDays")?.trim();
+    $("targetCoverageDays").value = ALLOWED_TARGET_COV.has(tc) ? tc : "30";
+
+    const ownP = params.get("ownWarehouseCode");
+    $("ownWarehouseCode").value = ownP !== null ? ownP.trim() : "";
+
+    const lim = params.get("limit")?.trim();
+    $("rowLimit").value = ALLOWED_LIMIT.has(lim) ? lim : "500";
+
+    $("leadTimeDays").value = clampIntStr(
+      params.get("leadTimeDays"),
+      1,
+      365,
+      45,
+    );
+    $("coverageDays").value = clampIntStr(
+      params.get("coverageDays"),
+      1,
+      730,
+      90,
+    );
+    $("safetyDays").value = clampIntStr(
+      params.get("safetyDays"),
+      0,
+      365,
+      0,
+    );
+
+    const qRaw = params.get("q");
+    $("q").value = qRaw != null ? String(qRaw) : "";
+
+    const ts = params.get("techSize");
+    const tsf = $("techSizeFilter");
+    if (tsf) tsf.value = ts != null ? String(ts) : "";
+  }
+
+  /** Параметры таблицы + KPI в одном объекте (как у API-запросов). */
+  function buildForecastUrlSearchParams() {
+    const p = queryParams();
+    p.set("limit", $("rowLimit").value);
+    return p;
+  }
+
+  /** Обновляет адресную строку без перезагрузки; `push` — отдельный шаг истории (drilldown). */
+  function syncUrlFromForm(mode) {
+    const path = window.location.pathname || "/";
+    const qs = buildForecastUrlSearchParams().toString();
+    const next = qs ? `${path}?${qs}` : path;
+    const cur = window.location.pathname + window.location.search;
+    if (next === cur) return;
+    if (mode === "push") {
+      history.pushState(null, "", next);
+    } else {
+      history.replaceState(null, "", next);
+    }
+  }
+
   const THEAD_WB_TOTAL = `<tr>
-          <th class="th-risk-wb-total" scope="col" title="Бакет риска по дням запаса WB (агрегат сети)">Риск</th>
-          <th class="th-vendor-wb-total" scope="col" title="vendor_code">vendor</th>
-          <th>nm_id</th>
-          <th>Размер</th>
-          <th title="Сумма (start_stock + incoming) по всем складам WB">WB ∑</th>
-          <th title="Наш склад (own CSV)">Own</th>
-          <th title="WB∑ + own">System</th>
-          <th title="Покрытие по сети: WB∑ / Σ спрос">Дн. WB</th>
-          <th title="Σ forecast_daily_demand по сети">Спрос/день Σ</th>
-          <th title="max(0, спрос×дни − WB∑ по сети)">На WB</th>
-          <th title="Та же формула, что в блоке закупки">У пр-ля</th>
-          <th title="MIN(stockout_date) по складам">OOS (WB)</th>
-          <th class="th-drill-wb-total" scope="col" title="Быстрый переход к строкам по складам для этого SKU">Склады</th>
+          <th class="th-risk-wb-total" scope="col" title="Бакет риска по дням запаса WB (агрегат сети); те же пороги 7/14/30 дней, что и для складского режима.">Риск</th>
+          <th class="th-vendor-wb-total" scope="col" title="Артикул поставщика (vendor_code) из среза WB.">vendor</th>
+          <th scope="col" title="Идентификатор номенклатуры на маркетплейсе.">nm_id</th>
+          <th scope="col" title="Размер (tech_size) в связке с nm_id.">Размер</th>
+          <th title="Сумма доступного на WB по сети: start_stock + incoming_units по всем складам для этого SKU.">WB ∑</th>
+          <th title="Остаток на нашем складе из own CSV (vendor_code → quantity).">Own</th>
+          <th title="Общий пул: WB∑ по сети + own; база для «системного» риска и закупки у поставщика.">System</th>
+          <th title="Дней покрытия по сети WB: WB∑ / Σ спроса в день (агрегат); при нулевом спросе — особые правила в домене.">Дн. WB</th>
+          <th title="Сумма прогнозных продаж в день (forecast_daily_demand) по всем складам WB для артикула×размера.">Спрос/день Σ</th>
+          <th title="Рекомендуемый довоз на WB: max(0, ceil(спрос×целевые дни − WB∑ по сети)) при выбранном targetCoverageDays.">На WB</th>
+          <th title="Рекомендация закупки у производителя для SKU (тот же пул system, что и в таблице закупки ниже).">У пр-ля</th>
+          <th title="Ранняя дата исчерпания по складам: MIN(stockout_date) в срезе; не фактическая дата отгрузки.">OOS (WB)</th>
+          <th class="th-drill-wb-total" scope="col" title="Переключить вид на склады и отфильтровать этот nm_id (+ tech_size в URL); удобный drilldown.">Склады</th>
         </tr>`;
 
   const THEAD_WAREHOUSES = `<tr>
@@ -210,8 +317,9 @@
     const tsf = $("techSizeFilter");
     if (tsf) tsf.value = techSize != null ? String(techSize) : "";
     setStatus("Переключение на склады WB по выбранному SKU…");
+    syncUrlFromForm("push");
     loadWarehouses()
-      .then(loadTable)
+      .then(() => loadTable({ skipUrl: true }))
       .catch((e) => setStatus(e && e.message ? e.message : String(e)));
   }
 
@@ -312,11 +420,38 @@
         ? "Всего строк (склад × SKU по фильтру)"
         : "Всего строк (SKU по сети WB по фильтру)";
     const cells = [
-      cell(rowLabel, data.totalRows),
-      cell("Critical · запас &lt; 7 дн.", r.critical, "risk-critical"),
-      cell("Warning · [7, 14) дн.", r.warning, "risk-warning"),
-      cell("Attention · [14, 30) дн.", r.attention, "risk-attention"),
-      cell("OK ≥30", r.ok, "risk-ok"),
+      cell(
+        rowLabel,
+        data.totalRows,
+        "",
+        vm === "wbWarehouses"
+          ? "Число строк warehouse×SKU после фильтров (как в основной таблице)."
+          : "Число строк SKU (nm_id×размер) в режиме WB в целом после фильтров.",
+      ),
+      cell(
+        "Critical · запас &lt; 7 дн.",
+        r.critical,
+        "risk-critical",
+        "Строк с целыми днями запаса &lt; 7 в текущем виде и фильтре (bucket critical).",
+      ),
+      cell(
+        "Warning · [7, 14) дн.",
+        r.warning,
+        "risk-warning",
+        "Строк в диапазоне [7; 14) дней покрытия (bucket warning).",
+      ),
+      cell(
+        "Attention · [14, 30) дн.",
+        r.attention,
+        "risk-attention",
+        "Строк в диапазоне [14; 30) дней покрытия (bucket attention).",
+      ),
+      cell(
+        "OK ≥30",
+        r.ok,
+        "risk-ok",
+        "Строк с покрытием не менее 30 дней (bucket ok).",
+      ),
     ];
     const rep = data.replenishment;
     if (rep && typeof rep.recommendedToWBTotal === "number") {
@@ -328,18 +463,29 @@
           "KPI по режиму (" + mode + "), шт.",
           primary,
           "",
+          mode === "supplier"
+            ? "Суммарная рекомендация «Заказать» у поставщика по уникальным SKU (витрина ниже); для режима wb здесь была бы сумма «На WB»."
+            : "Сумма рекомендаций довоза на WB по строкам текущего вида (в режиме WB в целом — по SKU-сети).",
         ),
       );
       const wbSumLabel =
         vm === "wbWarehouses"
           ? "Σ на WB (по строкам склад×SKU, network−спрос)"
           : "Σ на WB (SKU по сети, сумма рекомендаций «На WB»)";
-      cells.push(cell(wbSumLabel, rep.recommendedToWBTotal, ""));
+      cells.push(
+        cell(
+          wbSumLabel,
+          rep.recommendedToWBTotal,
+          "",
+          "Сумма столбца «На WB» по полному фильтру (без лимита таблицы): max(0, ceil( спрос×targetCoverage − WB∑ сети )) на строку.",
+        ),
+      );
       cells.push(
         cell(
           "Σ у производителя (уникальные SKU, см. таблицу ниже)",
           rep.recommendedFromSupplierTotal,
           "",
+          "Сумма recommendedFromSupplier по SKU-витрине; riskStockout к supplier-списку не применяется.",
         ),
       );
       if (typeof rep.recommendedOrderQtyTotal === "number") {
@@ -348,11 +494,19 @@
             "Σ заказ (план lead time + покрытие после прихода)",
             rep.recommendedOrderQtyTotal,
             "",
+            "Сумма recommendedOrderQty по тем же SKU и leadTime/coverage/safety, что в таблице закупки.",
           ),
         );
       }
       if (rep.ownWarehouseCode) {
-        cells.push(cell("own warehouse_code", rep.ownWarehouseCode, ""));
+        cells.push(
+          cell(
+            "own warehouse_code",
+            rep.ownWarehouseCode,
+            "",
+            "Код строки own_stock_snapshots, использованный в расчёте own и system.",
+          ),
+        );
       }
     }
     const staleLabel =
@@ -360,21 +514,40 @@
         ? "Устаревший сток (строк склад×SKU)"
         : "Устаревший сток (строк SKU по сети)";
     cells.push(
-      cell(staleLabel, data.staleStockRowCount),
-      cell("Сток snapshot min", data.oldestStockSnapshotAt ?? "—"),
-      cell("Сток snapshot max", data.newestStockSnapshotAt ?? "—"),
+      cell(
+        staleLabel,
+        data.staleStockRowCount,
+        "",
+        "Строк, у которых дата stock_snapshot_at старше выбранной snapshotDate (построчно или по SKU в режиме WB в целом — см. сервер).",
+      ),
+      cell(
+        "Сток snapshot min",
+        data.oldestStockSnapshotAt ?? "—",
+        "",
+        "Минимальная отметка времени снимка остатка среди строк, попавших в KPI.",
+      ),
+      cell(
+        "Сток snapshot max",
+        data.newestStockSnapshotAt ?? "—",
+        "",
+        "Максимальная отметка времени снимка остатка среди строк KPI.",
+      ),
     );
     el.innerHTML = cells.join("");
   }
 
-  function cell(label, value, cls) {
+  function cell(label, value, cls, title) {
     const v =
       typeof value === "number"
         ? String(value)
         : value == null
           ? "—"
           : String(value);
-    return `<div class="cell"><span class="muted">${label}</span><strong class="${cls || ""}">${v}</strong></div>`;
+    const titleAttr =
+      title != null && String(title).length > 0
+        ? ` title="${escapeHtml(String(title))}"`
+        : "";
+    return `<div class="cell"${titleAttr}><span class="muted">${label}</span><strong class="${cls || ""}">${v}</strong></div>`;
   }
 
   function badgeClass(risk) {
@@ -610,6 +783,8 @@
     const data = await api(`/api/forecast/warehouse-keys?${p}`);
     const sel = $("warehouseKey");
     const current = sel.value;
+    const fromUrl = pendingWarehouseKeyFromUrl;
+    pendingWarehouseKeyFromUrl = null;
     sel.innerHTML = '<option value="">Все</option>';
     for (const k of data.warehouseKeys || []) {
       const o = document.createElement("option");
@@ -617,7 +792,10 @@
       o.textContent = k;
       sel.appendChild(o);
     }
-    if ([...sel.options].some((o) => o.value === current)) sel.value = current;
+    const prefer = fromUrl !== null ? fromUrl : current;
+    if ([...sel.options].some((o) => o.value === prefer)) {
+      sel.value = prefer;
+    }
   }
 
   function renderSupplierRows(rows) {
@@ -649,7 +827,8 @@
       .join("");
   }
 
-  async function loadTable() {
+  async function loadTable(opts) {
+    const skipUrl = opts && opts.skipUrl;
     const sumP = queryParams();
     const rowP = rowsQueryParams();
     setStatus("Загрузка…");
@@ -693,6 +872,9 @@
       msg += total ? ` (все ${total} по фильтру)` : "";
     }
     setStatus(msg);
+    if (!skipUrl) {
+      syncUrlFromForm("replace");
+    }
   }
 
   async function recalculate() {
@@ -750,7 +932,7 @@
     });
   }
 
-  $("snapshotDate").value = todayYmd();
+  applyFormFromUrl();
   renderTableHeader($("viewMode").value);
   updateMainTableHint($("viewMode").value);
 
@@ -795,6 +977,15 @@
   $("q").addEventListener("input", () => {
     const tsf = $("techSizeFilter");
     if (tsf) tsf.value = "";
+  });
+
+  window.addEventListener("popstate", () => {
+    applyFormFromUrl();
+    renderTableHeader($("viewMode").value);
+    updateMainTableHint($("viewMode").value);
+    loadWarehouses()
+      .then(() => loadTable({ skipUrl: true }))
+      .catch((e) => setStatus(e && e.message ? e.message : String(e)));
   });
 
   loadWarehouses()

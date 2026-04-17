@@ -37,6 +37,12 @@ pnpm serve:forecast-ui
 
 Открыть в браузере: **`http://127.0.0.1:3847/`** (хост/порт см. `FORECAST_UI_*` в `.env`).
 
+### Состояние фильтров в адресной строке (без SPA-роутера)
+
+Страница — обычный HTML/JS: при **первой загрузке** и при **Назад/Вперёд** (`popstate`) состояние формы восстанавливается из **`location.search`** (те же имена, что у API). После **успешной** загрузки таблицы и сводки URL обновляется через **`history.replaceState`** (без перезагрузки, без засорения истории на каждый чих). Исключение: **drilldown** из режима «WB в целом» в «По складам» — **`history.pushState`**, чтобы **Назад** возвращала к предыдущему виду/фильтру.
+
+**В URL сериализуются:** `viewMode`, `snapshotDate`, `horizonDays`, `warehouseKey`, `q`, `techSize`, `riskStockout`, `replenishmentMode`, `targetCoverageDays`, `ownWarehouseCode`, `limit`, `leadTimeDays`, `coverageDays`, `safetyDays`. Пустой/некорректный параметр → мягкий fallback на дефолт UI. **`apiToken` (FORECAST_UI_TOKEN)** в query **не** записывается и в URL **не** попадает (как и раньше — только заголовок при запросах к API).
+
 **Две блока в UI**
 
 | Блок | Уровень | Что показывает |

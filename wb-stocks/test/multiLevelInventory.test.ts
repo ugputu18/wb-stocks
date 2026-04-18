@@ -4,7 +4,9 @@ import {
   buildSupplierOrderPlan,
   buildSupplierSkuReplenishment,
   buildWbRowReplenishment,
+  daysOfStockSystemFromNetworkTotals,
   daysOfStockWbFromNetworkTotals,
+  systemStockoutDateEstimateFromSnapshot,
 } from "../src/domain/multiLevelInventory.js";
 
 describe("buildInventoryLevels", () => {
@@ -41,6 +43,35 @@ describe("daysOfStockWbFromNetworkTotals", () => {
 
   it("when demand is zero and stock zero, returns zero", () => {
     expect(daysOfStockWbFromNetworkTotals(0, 0)).toBe(0);
+  });
+});
+
+describe("daysOfStockSystemFromNetworkTotals", () => {
+  it("uses system pool / demand (same formula as WB totals helper)", () => {
+    expect(daysOfStockSystemFromNetworkTotals(150, 10)).toBe(15);
+  });
+});
+
+describe("systemStockoutDateEstimateFromSnapshot", () => {
+  it("adds floor(days) calendar UTC days to snapshot", () => {
+    expect(
+      systemStockoutDateEstimateFromSnapshot("2026-04-17", 5.9, 10),
+    ).toBe("2026-04-22");
+    expect(
+      systemStockoutDateEstimateFromSnapshot("2026-04-17", 0, 10),
+    ).toBe("2026-04-17");
+  });
+
+  it("returns null when demand non-positive", () => {
+    expect(
+      systemStockoutDateEstimateFromSnapshot("2026-04-17", 10, 0),
+    ).toBeNull();
+  });
+
+  it("returns null when whole days negative", () => {
+    expect(
+      systemStockoutDateEstimateFromSnapshot("2026-04-17", -1, 10),
+    ).toBeNull();
   });
 });
 

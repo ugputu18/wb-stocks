@@ -20,6 +20,7 @@ import type {
   ForecastReportFilter,
   ForecastViewMode,
   RiskStockoutFilter,
+  SystemTotalBySkuReportRow,
   WbForecastSnapshotReportRow,
   WbTotalBySkuReportRow,
 } from "../infra/wbForecastSnapshotRepository.js";
@@ -29,6 +30,12 @@ import { toCsv } from "./csv.js";
 const STATIC_DIR = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "../../public/forecast-ui",
+);
+
+/** Preact/Vite build (`pnpm build:forecast-ui-client`); main UI at `/`, assets under `/next/*` (Vite `base: /next/`). */
+const STATIC_DIR_NEXT = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../public/forecast-ui-next",
 );
 
 export interface ForecastUiServerCtx {
@@ -96,12 +103,16 @@ const ALLOWED_TARGET_COVERAGE = new Set([30, 45, 60]);
 const DEFAULT_SUPPLIER_LEAD_DAYS = 45;
 const DEFAULT_SUPPLIER_ORDER_COVERAGE_DAYS = 90;
 const DEFAULT_SUPPLIER_SAFETY_DAYS = 0;
+/** Должно совпадать с `max` у `#leadTimeDays` в forecast UI (сейчас 1000). */
+const MAX_SUPPLIER_LEAD_DAYS = 1000;
 
 function parseSupplierLeadTimeDays(url: URL): number {
   const raw = url.searchParams.get("leadTimeDays");
   if (raw === null || raw.trim() === "") return DEFAULT_SUPPLIER_LEAD_DAYS;
   const n = Number(raw);
-  if (!Number.isInteger(n) || n < 1 || n > 365) return DEFAULT_SUPPLIER_LEAD_DAYS;
+  if (!Number.isInteger(n) || n < 1 || n > MAX_SUPPLIER_LEAD_DAYS) {
+    return DEFAULT_SUPPLIER_LEAD_DAYS;
+  }
   return n;
 }
 
@@ -128,6 +139,8 @@ function parseRiskStockout(raw: string | null): RiskStockoutFilter {
   if (t === "lt7" || t === "<7" || t === "under7") return "lt7";
   if (t === "lt14" || t === "<14" || t === "under14") return "lt14";
   if (t === "lt30" || t === "<30" || t === "under30") return "lt30";
+  if (t === "lt45" || t === "<45" || t === "under45") return "lt45";
+  if (t === "lt60" || t === "<60" || t === "under60") return "lt60";
   return "all";
 }
 
@@ -145,13 +158,39 @@ function parseReplenishmentMode(url: URL): ReplenishmentMode {
   return "wb";
 }
 
-/** Default `wbTotal` — одна строка на SKU по сети WB. */
+/** По умолчанию `systemTotal` — SKU×system (WB+own); без параметра в URL — как в UI. */
 function parseViewMode(url: URL): ForecastViewMode {
   const raw = url.searchParams.get("viewMode")?.trim().toLowerCase() ?? "";
   if (raw === "wbwarehouses" || raw === "warehouses" || raw === "by-warehouse") {
     return "wbWarehouses";
   }
+  if (raw === "wbtotal" || raw === "wb" || raw === "wb-network") {
+    return "wbTotal";
+  }
+  if (
+    raw === "" ||
+    raw === "systemtotal" ||
+    raw === "system" ||
+    raw === "system-stock" ||
+    raw === "stocks"
+  ) {
+    return "systemTotal";
+  }
   return "wbTotal";
+}
+
+type SystemTotalQuickFilter = "all" | "systemRisk" | "supplierOrder" | "wbReplenish";
+
+function parseSystemTotalQuickFilter(url: URL): SystemTotalQuickFilter {
+  const raw = url.searchParams.get("systemQuickFilter")?.trim().toLowerCase() ?? "";
+  if (raw === "systemrisk" || raw === "system_risk") return "systemRisk";
+  if (raw === "supplierorder" || raw === "supplier" || raw === "from_supplier") {
+    return "supplierOrder";
+  }
+  if (raw === "wbreplenish" || raw === "wb" || raw === "towb" || raw === "on_wb") {
+    return "wbReplenish";
+  }
+  return "all";
 }
 
 function parseOwnWarehouseCode(url: URL): string {
@@ -192,6 +231,8 @@ const WB_TOTAL_EXPORT_COLUMNS = [
   "vendor_code",
   "nm_id",
   "tech_size",
+  "wb_start_stock_total",
+  "wb_incoming_units_total",
   "wb_available_total",
   "own_stock",
   "system_available",
@@ -203,10 +244,33 @@ const WB_TOTAL_EXPORT_COLUMNS = [
   "stock_snapshot_at_wb",
 ] as const;
 
+const SYSTEM_TOTAL_EXPORT_COLUMNS = [
+  "risk_bucket",
+  "vendor_code",
+  "nm_id",
+  "tech_size",
+  "wb_start_stock_total",
+  "wb_incoming_units_total",
+  "wb_available_total",
+  "own_stock",
+  "system_available",
+  "days_of_stock_system",
+  "forecast_daily_demand_total",
+  "recommended_to_wb",
+  "recommended_from_supplier",
+  "recommended_order_qty",
+  "system_stockout_date_estimate",
+  "stock_snapshot_at_system",
+  "wb_risk",
+  "system_risk",
+] as const;
+
 const SUPPLIER_EXPORT_COLUMNS = [
   "vendor_code",
   "nm_id",
   "tech_size",
+  "wb_start_stock_total",
+  "wb_incoming_units_total",
   "wb_available_total",
   "own_stock",
   "system_available",
@@ -238,6 +302,8 @@ function wbTotalRowsToCsvObjects(
     vendor_code: row.vendorCode ?? "",
     nm_id: row.nmId,
     tech_size: row.techSize,
+    wb_start_stock_total: row.wbStartStockTotal,
+    wb_incoming_units_total: row.wbIncomingUnitsTotal,
     wb_available_total: row.wbAvailableTotal,
     own_stock: row.ownStock,
     system_available: row.inventoryLevels.systemAvailable,
@@ -247,6 +313,31 @@ function wbTotalRowsToCsvObjects(
     recommended_from_supplier: row.recommendedFromSupplier,
     stockout_date_wb: row.stockoutDateWB ?? "",
     stock_snapshot_at_wb: row.stockSnapshotAtWB,
+  }));
+}
+
+function systemTotalRowsToCsvObjects(
+  rows: SystemTotalBySkuReportRow[],
+): Record<string, unknown>[] {
+  return rows.map((row) => ({
+    risk_bucket: row.risk,
+    vendor_code: row.vendorCode ?? "",
+    nm_id: row.nmId,
+    tech_size: row.techSize,
+    wb_start_stock_total: row.wbStartStockTotal,
+    wb_incoming_units_total: row.wbIncomingUnitsTotal,
+    wb_available_total: row.wbAvailableTotal,
+    own_stock: row.ownStock,
+    system_available: row.inventoryLevels.systemAvailable,
+    days_of_stock_system: row.daysOfStockSystem,
+    forecast_daily_demand_total: row.forecastDailyDemandTotal,
+    recommended_to_wb: row.replenishment?.recommendedToWB ?? "",
+    recommended_from_supplier: row.recommendedFromSupplier,
+    recommended_order_qty: row.recommendedOrderQty,
+    system_stockout_date_estimate: row.systemStockoutDateEstimate ?? "",
+    stock_snapshot_at_system: row.stockSnapshotAtSystem,
+    wb_risk: row.inventoryLevels.wbRisk,
+    system_risk: row.inventoryLevels.systemRisk,
   }));
 }
 
@@ -277,6 +368,8 @@ function supplierRowsToCsvObjects(
     vendor_code: r.vendorCode ?? "",
     nm_id: r.nmId,
     tech_size: r.techSize,
+    wb_start_stock_total: r.wbStartStockTotal,
+    wb_incoming_units_total: r.wbIncomingUnitsTotal,
     wb_available_total: r.wbAvailableTotal,
     own_stock: r.ownStock,
     system_available: r.systemAvailable,
@@ -327,6 +420,7 @@ function parseQuery(url: URL): ForecastReportFilter & {
   const supplierOrderCoverageDays = parseSupplierOrderCoverageDays(url);
   const supplierSafetyDays = parseSupplierSafetyDays(url);
   const viewMode = parseViewMode(url);
+  const systemTotalQuickFilter = parseSystemTotalQuickFilter(url);
   return {
     snapshotDate,
     horizonDays,
@@ -341,6 +435,7 @@ function parseQuery(url: URL): ForecastReportFilter & {
     supplierOrderCoverageDays,
     supplierSafetyDays,
     viewMode,
+    systemTotalQuickFilter,
   };
 }
 
@@ -382,7 +477,28 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
         return;
       }
 
+      /** Main forecast UI (Preact). */
       if (req.method === "GET" && pathname === "/") {
+        const p = join(STATIC_DIR_NEXT, "index.html");
+        if (!existsSync(p)) {
+          json(res, 503, {
+            ok: false,
+            error:
+              "Forecast UI not built: run pnpm build:forecast-ui-client in wb-stocks",
+          });
+          return;
+        }
+        const html = readFileSync(p, "utf8");
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(html);
+        return;
+      }
+
+      /** Legacy static HTML (vanilla JS); unchanged behavior, own `/static/*` assets. */
+      if (
+        req.method === "GET" &&
+        (pathname === "/legacy" || pathname === "/legacy/")
+      ) {
         const p = join(STATIC_DIR, "index.html");
         if (!existsSync(p)) {
           json(res, 500, { ok: false, error: "Missing public/forecast-ui/index.html" });
@@ -391,6 +507,49 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
         const html = readFileSync(p, "utf8");
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(html);
+        return;
+      }
+
+      /** Old entry URL for the Preact app — redirect to `/` preserving query (bookmarks, shared links). */
+      if (
+        req.method === "GET" &&
+        (pathname === "/next" || pathname === "/next/")
+      ) {
+        const loc = `/${url.search}`;
+        res.writeHead(302, { Location: loc });
+        res.end();
+        return;
+      }
+
+      if (
+        req.method === "GET" &&
+        pathname.startsWith("/next/") &&
+        pathname.length > "/next/".length
+      ) {
+        const name = pathname.slice("/next/".length);
+        if (!name || name.includes("..")) {
+          json(res, 404, { ok: false, error: "Not found" });
+          return;
+        }
+        const p = resolve(STATIC_DIR_NEXT, name);
+        const rel = relative(STATIC_DIR_NEXT, p);
+        if (rel.startsWith("..") || rel === "") {
+          json(res, 404, { ok: false, error: "Not found" });
+          return;
+        }
+        if (!existsSync(p)) {
+          json(res, 404, { ok: false, error: "Not found" });
+          return;
+        }
+        const ext = name.split(".").pop();
+        const ct =
+          ext === "js"
+            ? "text/javascript; charset=utf-8"
+            : ext === "css"
+              ? "text/css; charset=utf-8"
+              : "application/octet-stream";
+        res.writeHead(200, { "Content-Type": ct });
+        res.end(readFileSync(p));
         return;
       }
 
@@ -462,6 +621,7 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
           supplierOrderCoverageDays: q.supplierOrderCoverageDays,
           supplierSafetyDays: q.supplierSafetyDays,
           viewMode: q.viewMode,
+          systemTotalQuickFilter: q.systemTotalQuickFilter,
         };
         const rows =
           q.viewMode === "wbWarehouses"
@@ -471,16 +631,24 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
                 filter,
                 limit,
               )
-            : forecastRepo.listWbTotalBySkuReportRows(
-                q.snapshotDate,
-                q.horizonDays,
-                filter,
-                limit,
-              );
+            : q.viewMode === "systemTotal"
+              ? forecastRepo.listSystemTotalBySkuReportRows(
+                  q.snapshotDate,
+                  q.horizonDays,
+                  filter,
+                  limit,
+                )
+              : forecastRepo.listWbTotalBySkuReportRows(
+                  q.snapshotDate,
+                  q.horizonDays,
+                  filter,
+                  limit,
+                );
         json(res, 200, {
           snapshotDate: q.snapshotDate,
           horizonDays: q.horizonDays,
           viewMode: q.viewMode,
+          systemTotalQuickFilter: q.systemTotalQuickFilter,
           riskStockout: q.riskStockout,
           targetCoverageDays: q.replenishmentTargetCoverageDays,
           replenishmentMode: q.replenishmentMode,
@@ -509,6 +677,7 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
           supplierOrderCoverageDays: q.supplierOrderCoverageDays,
           supplierSafetyDays: q.supplierSafetyDays,
           viewMode: q.viewMode,
+          systemTotalQuickFilter: q.systemTotalQuickFilter,
         };
         const agg = forecastRepo.aggregateReportMetrics(
           q.snapshotDate,
@@ -519,6 +688,7 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
           snapshotDate: q.snapshotDate,
           horizonDays: q.horizonDays,
           viewMode: q.viewMode,
+          systemTotalQuickFilter: q.systemTotalQuickFilter,
           riskStockout: q.riskStockout,
           targetCoverageDays: q.replenishmentTargetCoverageDays,
           replenishmentMode: q.replenishmentMode,
@@ -600,6 +770,7 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
           supplierOrderCoverageDays: q.supplierOrderCoverageDays,
           supplierSafetyDays: q.supplierSafetyDays,
           viewMode: q.viewMode,
+          systemTotalQuickFilter: q.systemTotalQuickFilter,
         };
         const csv =
           q.viewMode === "wbWarehouses"
@@ -614,17 +785,29 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
                 ),
                 [...WB_EXPORT_COLUMNS],
               )
-            : toCsv(
-                wbTotalRowsToCsvObjects(
-                  forecastRepo.listWbTotalBySkuReportRows(
-                    q.snapshotDate,
-                    q.horizonDays,
-                    filter,
-                    undefined,
+            : q.viewMode === "systemTotal"
+              ? toCsv(
+                  systemTotalRowsToCsvObjects(
+                    forecastRepo.listSystemTotalBySkuReportRows(
+                      q.snapshotDate,
+                      q.horizonDays,
+                      filter,
+                      undefined,
+                    ),
                   ),
-                ),
-                [...WB_TOTAL_EXPORT_COLUMNS],
-              );
+                  [...SYSTEM_TOTAL_EXPORT_COLUMNS],
+                )
+              : toCsv(
+                  wbTotalRowsToCsvObjects(
+                    forecastRepo.listWbTotalBySkuReportRows(
+                      q.snapshotDate,
+                      q.horizonDays,
+                      filter,
+                      undefined,
+                    ),
+                  ),
+                  [...WB_TOTAL_EXPORT_COLUMNS],
+                );
         sendCsvAttachment(
           res,
           forecastWbCsvFilename(q.snapshotDate, q.horizonDays),
@@ -750,6 +933,7 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
         host: cfg.FORECAST_UI_HOST,
         port: cfg.FORECAST_UI_PORT,
         static: STATIC_DIR,
+        staticNext: STATIC_DIR_NEXT,
       },
       "Forecast UI server listening",
     );

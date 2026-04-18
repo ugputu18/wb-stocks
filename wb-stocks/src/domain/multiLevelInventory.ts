@@ -56,6 +56,10 @@ export interface SupplierSkuReplenishmentReadModel {
   safetyDays: number;
   targetDemandSystem: number;
   wbAvailableTotal: number;
+  /** Σ start_stock по всем складам WB для SKU (снимок). */
+  wbStartStockTotal: number;
+  /** Σ incoming_units по горизонту по всем складам WB для SKU. */
+  wbIncomingUnitsTotal: number;
   ownStock: number;
   systemAvailable: number;
   recommendedFromSupplier: number;
@@ -124,6 +128,50 @@ export function daysOfStockWbFromNetworkTotals(
   if (!Number.isFinite(wb)) return 0;
   if (!Number.isFinite(fd) || fd <= EPS) return wb > EPS ? 1e6 : 0;
   return wb / fd;
+}
+
+/**
+ * Дней покрытия по **всей системе** (WB∑ + own) для SKU: `systemAvailable / forecastDailyDemandTotal`.
+ * Та же численная ветка, что у `daysOfStockWbFromNetworkTotals`, иной смысл входа.
+ */
+export function daysOfStockSystemFromNetworkTotals(
+  systemAvailable: number,
+  forecastDailyDemandTotal: number,
+): number {
+  return daysOfStockWbFromNetworkTotals(systemAvailable, forecastDailyDemandTotal);
+}
+
+/**
+ * Оценка календарной даты исчерпания пула **system** (read-side): дата среза
+ * + **floor(daysOfStockSystem)** полных календарных дней при постоянном Σ-спросе/день.
+ * Не посуточная симуляция по складам WB и не `stockout_date` из среза.
+ *
+ * @returns `YYYY-MM-DD` в UTC-календарной арифметике от `snapshotDateYmd`, либо `null`
+ * если спрос ≤ 0, дней запаса нет/⟨0, или формат даты среза невалиден.
+ */
+export function systemStockoutDateEstimateFromSnapshot(
+  snapshotDateYmd: string,
+  daysOfStockSystem: number,
+  forecastDailyDemandTotal: number,
+): string | null {
+  const fd = Number(forecastDailyDemandTotal);
+  if (!Number.isFinite(fd) || fd <= EPS) return null;
+  const days = Number(daysOfStockSystem);
+  if (!Number.isFinite(days)) return null;
+  const whole = Math.floor(days);
+  if (whole < 0) return null;
+  const s = String(snapshotDateYmd ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const utcMs = Date.UTC(
+    Number(s.slice(0, 4)),
+    Number(s.slice(5, 7)) - 1,
+    Number(s.slice(8, 10)),
+  );
+  const out = new Date(utcMs + whole * 86_400_000);
+  const y = out.getUTCFullYear();
+  const m = String(out.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(out.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 export function buildInventoryLevels(

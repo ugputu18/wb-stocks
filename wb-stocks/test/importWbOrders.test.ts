@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { openDatabase } from "../src/infra/db.js";
+import { NO_REGION_KEY } from "../src/domain/regionName.js";
 import { WbOrdersDailyRepository } from "../src/infra/wbOrdersDailyRepository.js";
+import { WbOrdersDailyByRegionRepository } from "../src/infra/wbOrdersDailyByRegionRepository.js";
 import {
   importWbOrders,
   aggregateByDay,
@@ -63,6 +65,8 @@ describe("aggregateByDay", () => {
         lastChangeDate: r.lastChangeDate,
         warehouseNameRaw: r.warehouseName,
         warehouseKey: String(r.warehouseName).toLocaleLowerCase("ru-RU"),
+        regionNameRaw: null,
+        regionKey: NO_REGION_KEY,
         nmId: r.nmId,
         techSize: r.techSize,
         vendorCode: r.supplierArticle,
@@ -87,10 +91,12 @@ describe("aggregateByDay", () => {
 
 describe("importWbOrders use case", () => {
   let repo: WbOrdersDailyRepository;
+  let repoRegion: WbOrdersDailyByRegionRepository;
 
   beforeEach(() => {
     const db = openDatabase(":memory:");
     repo = new WbOrdersDailyRepository(db);
+    repoRegion = new WbOrdersDailyByRegionRepository(db);
   });
 
   it("fetches, aggregates, and replaces days in DB", async () => {
@@ -107,6 +113,7 @@ describe("importWbOrders use case", () => {
       {
         wbClient: client,
         repository: repo,
+        ordersByRegionRepository: repoRegion,
         logger: silentLogger(),
         now: () => new Date("2026-04-17T10:00:00.000Z"),
       },
@@ -118,6 +125,8 @@ describe("importWbOrders use case", () => {
     expect(r.skippedRows).toBe(0);
     expect(r.daysReplaced).toBe(2);
     expect(r.rowsInserted).toBe(2); // one row per day after aggregation
+    expect(r.regionDaysReplaced).toBe(2);
+    expect(r.regionRowsInserted).toBe(2);
 
     expect(repo.countDay("2026-04-15")).toBe(1);
     const fetched = repo.getRange("2026-04-15", "2026-04-15")[0]!;
@@ -137,6 +146,7 @@ describe("importWbOrders use case", () => {
       {
         wbClient: fakeClient([data]),
         repository: repo,
+        ordersByRegionRepository: repoRegion,
         logger: silentLogger(),
         now: () => new Date("2026-04-17T10:00:00.000Z"),
       },
@@ -146,6 +156,7 @@ describe("importWbOrders use case", () => {
       {
         wbClient: fakeClient([data]),
         repository: repo,
+        ordersByRegionRepository: repoRegion,
         logger: silentLogger(),
         now: () => new Date("2026-04-17T11:00:00.000Z"),
       },
@@ -153,7 +164,9 @@ describe("importWbOrders use case", () => {
     );
 
     expect(r1.rowsInserted).toBe(1);
+    expect(r1.regionRowsInserted).toBe(1);
     expect(r2.rowsInserted).toBe(1);
+    expect(r2.regionRowsInserted).toBe(1);
     expect(r2.rowsDeleted).toBe(1); // overwrote prior day
     expect(repo.countAll()).toBe(1);
   });
@@ -165,6 +178,7 @@ describe("importWbOrders use case", () => {
           [row({ srid: "a" }), row({ srid: "b" }), row({ srid: "c" })],
         ]),
         repository: repo,
+        ordersByRegionRepository: repoRegion,
         logger: silentLogger(),
         now: () => new Date("2026-04-17T10:00:00.000Z"),
       },
@@ -183,6 +197,7 @@ describe("importWbOrders use case", () => {
           ],
         ]),
         repository: repo,
+        ordersByRegionRepository: repoRegion,
         logger: silentLogger(),
         now: () => new Date("2026-04-17T11:00:00.000Z"),
       },
@@ -203,6 +218,7 @@ describe("importWbOrders use case", () => {
           [row({ date: "2026-04-01T10:00:00", srid: "old" })],
         ]),
         repository: repo,
+        ordersByRegionRepository: repoRegion,
         logger: silentLogger(),
         now: () => new Date("2026-04-17T10:00:00.000Z"),
       },
@@ -215,6 +231,7 @@ describe("importWbOrders use case", () => {
       {
         wbClient: fakeClient([[row({ srid: "x" })]]),
         repository: repo,
+        ordersByRegionRepository: repoRegion,
         logger: silentLogger(),
         now: () => new Date("2026-04-17T11:00:00.000Z"),
       },
@@ -230,6 +247,7 @@ describe("importWbOrders use case", () => {
       {
         wbClient: fakeClient([[row(), row({ srid: "b" })]]),
         repository: repo,
+        ordersByRegionRepository: repoRegion,
         logger: silentLogger(),
         now: () => new Date("2026-04-17T10:00:00.000Z"),
       },
@@ -238,6 +256,8 @@ describe("importWbOrders use case", () => {
     expect(r.validRows).toBe(2);
     expect(r.daysReplaced).toBe(0);
     expect(r.rowsInserted).toBe(0);
+    expect(r.regionDaysReplaced).toBe(0);
+    expect(r.regionRowsInserted).toBe(0);
     expect(repo.countAll()).toBe(0);
   });
 
@@ -248,6 +268,7 @@ describe("importWbOrders use case", () => {
           [row(), { date: "??", nmId: 1 }, null, row({ srid: "b" })],
         ]),
         repository: repo,
+        ordersByRegionRepository: repoRegion,
         logger: silentLogger(),
         now: () => new Date("2026-04-17T10:00:00.000Z"),
       },

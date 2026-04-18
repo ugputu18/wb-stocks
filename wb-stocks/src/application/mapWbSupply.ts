@@ -1,3 +1,4 @@
+import type { ZodIssue } from "zod";
 import {
   wbSupplyDetailsSchema,
   wbSupplyGoodsRowSchema,
@@ -110,10 +111,8 @@ function nullableBool(v: boolean | null | undefined): boolean | null {
   return v;
 }
 
-function zodReason(
-  issues: ReadonlyArray<{ path: ReadonlyArray<string | number>; message: string }>,
-): string {
+function zodReason(issues: readonly ZodIssue[]): string {
   return issues
-    .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
+    .map((i) => `${i.path.map(String).join(".") || "<root>"}: ${i.message}`)
     .join("; ");
 }

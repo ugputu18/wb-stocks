@@ -1,15 +1,20 @@
 import type { Logger } from "pino";
 import type { WbStatsClient } from "../infra/wbStatsClient.js";
 import type { WbOrdersDailyRepository } from "../infra/wbOrdersDailyRepository.js";
+import type { WbOrdersDailyByRegionRepository } from "../infra/wbOrdersDailyByRegionRepository.js";
 import type {
   WbOrderUnit,
   WbOrdersDailyRecord,
+  WbOrdersDailyRegionRecord,
 } from "../domain/wbOrder.js";
+import { UNKNOWN_WB_REGION_KEY } from "../domain/wbRegionKey.js";
 import { mapWbOrderRow } from "./mapWbOrderRow.js";
 
 export interface ImportWbOrdersDeps {
   wbClient: WbStatsClient;
   repository: WbOrdersDailyRepository;
+  /** Агрегат по региону заказа (`regionName`); тот же импорт, параллельная таблица. */
+  ordersByRegionRepository: WbOrdersDailyByRegionRepository;
   logger: Logger;
   /** Override for tests; defaults to () => new Date(). */
   now?: () => Date;
@@ -47,6 +52,15 @@ export interface ImportWbOrdersResult {
   rowsDeleted: number;
   /** Per-day "inserted" counts summed. */
   rowsInserted: number;
+  /** Дни, перезаписанные в `wb_orders_daily_by_region`. */
+  regionDaysReplaced: number;
+  regionRowsDeleted: number;
+  regionRowsInserted: number;
+  /**
+   * Число строк заказов (единиц) в окне импорта с пустым `regionName`
+   * (ключ агрегата {@link UNKNOWN_WB_REGION_KEY}).
+   */
+  orderUnitsWithUnknownRegion: number;
   durationMs: number;
   dryRun: boolean;
 }
@@ -75,7 +89,7 @@ export async function importWbOrders(
   deps: ImportWbOrdersDeps,
   options: ImportWbOrdersOptions = {},
 ): Promise<ImportWbOrdersResult> {
-  const { wbClient, repository, logger } = deps;
+  const { wbClient, repository, ordersByRegionRepository, logger } = deps;
   const now = deps.now ?? (() => new Date());
   const startedAt = now();
   const seenAt = startedAt.toISOString();
@@ -148,12 +162,21 @@ export async function importWbOrders(
     return true;
   });
 
+  let orderUnitsWithUnknownRegion = 0;
+  for (const u of filtered) {
+    if (u.regionKey === UNKNOWN_WB_REGION_KEY) orderUnitsWithUnknownRegion += 1;
+  }
+
   // 4) Aggregate by (orderDate, warehouseKey, nmId, techSize).
   const byDay = aggregateByDay(filtered, seenAt);
+  const byDayRegion = aggregateByDayRegion(filtered, seenAt);
 
   let daysReplaced = 0;
   let rowsDeleted = 0;
   let rowsInserted = 0;
+  let regionDaysReplaced = 0;
+  let regionRowsDeleted = 0;
+  let regionRowsInserted = 0;
   if (!dryRun) {
     for (const [orderDate, rows] of byDay) {
       const { deleted, inserted } = repository.replaceDay(orderDate, rows);
@@ -163,6 +186,25 @@ export async function importWbOrders(
       logger.info(
         { orderDate, deleted, inserted, distinctRows: rows.length },
         "WB orders import: day replaced",
+      );
+    }
+    for (const [orderDate, rows] of byDayRegion) {
+      const { deleted, inserted } = ordersByRegionRepository.replaceDay(
+        orderDate,
+        rows,
+      );
+      regionDaysReplaced += 1;
+      regionRowsDeleted += deleted;
+      regionRowsInserted += inserted;
+      logger.info(
+        {
+          orderDate,
+          deleted,
+          inserted,
+          distinctRows: rows.length,
+          table: "wb_orders_daily_by_region",
+        },
+        "WB orders import: region day replaced",
       );
     }
   }
@@ -178,6 +220,10 @@ export async function importWbOrders(
     daysReplaced,
     rowsDeleted,
     rowsInserted,
+    regionDaysReplaced,
+    regionRowsDeleted,
+    regionRowsInserted,
+    orderUnitsWithUnknownRegion,
     durationMs,
     dryRun,
   };
@@ -235,6 +281,60 @@ export function aggregateByDay(
   }
 
   const out = new Map<string, WbOrdersDailyRecord[]>();
+  for (const [day, m] of byDay) {
+    out.set(day, Array.from(m.values()));
+  }
+  return out;
+}
+
+/**
+ * Агрегат по `(orderDate, regionKey, nmId, techSize)` для `wb_orders_daily_by_region`.
+ */
+export function aggregateByDayRegion(
+  units: readonly WbOrderUnit[],
+  seenAt: string,
+): Map<string, WbOrdersDailyRegionRecord[]> {
+  const byDay = new Map<string, Map<string, WbOrdersDailyRegionRecord>>();
+  for (const u of units) {
+    let dayMap = byDay.get(u.orderDate);
+    if (!dayMap) {
+      dayMap = new Map();
+      byDay.set(u.orderDate, dayMap);
+    }
+    const key = `${u.regionKey}\u0000${u.nmId}\u0000${u.techSize}`;
+    const existing = dayMap.get(key);
+    if (!existing) {
+      dayMap.set(key, {
+        orderDate: u.orderDate,
+        regionNameRaw: u.regionNameRaw,
+        regionKey: u.regionKey,
+        nmId: u.nmId,
+        techSize: u.techSize,
+        vendorCode: u.vendorCode,
+        barcode: u.barcode,
+        units: u.isCancel ? 0 : 1,
+        cancelledUnits: u.isCancel ? 1 : 0,
+        grossUnits: 1,
+        firstSeenAt: seenAt,
+        lastSeenAt: seenAt,
+      });
+    } else {
+      existing.grossUnits += 1;
+      if (u.isCancel) existing.cancelledUnits += 1;
+      else existing.units += 1;
+      if (existing.vendorCode === null && u.vendorCode !== null) {
+        existing.vendorCode = u.vendorCode;
+      }
+      if (existing.barcode === null && u.barcode !== null) {
+        existing.barcode = u.barcode;
+      }
+      if (existing.regionNameRaw === null && u.regionNameRaw !== null) {
+        existing.regionNameRaw = u.regionNameRaw;
+      }
+    }
+  }
+
+  const out = new Map<string, WbOrdersDailyRegionRecord[]>();
   for (const [day, m] of byDay) {
     out.set(day, Array.from(m.values()));
   }

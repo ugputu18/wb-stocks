@@ -2,7 +2,9 @@ import type { Logger } from "pino";
 import type { DbHandle } from "../infra/db.js";
 import type { WbStatsClient } from "../infra/wbStatsClient.js";
 import type { WbOrdersDailyRepository } from "../infra/wbOrdersDailyRepository.js";
+import type { WbOrdersDailyByRegionRepository } from "../infra/wbOrdersDailyByRegionRepository.js";
 import type { WbDemandSnapshotRepository } from "../infra/wbDemandSnapshotRepository.js";
+import type { WbRegionDemandSnapshotRepository } from "../infra/wbRegionDemandSnapshotRepository.js";
 import type { StockSnapshotRepository } from "../infra/stockSnapshotRepository.js";
 import type { WbSupplyRepository } from "../infra/wbSupplyRepository.js";
 import type { WbForecastSnapshotRepository } from "../infra/wbForecastSnapshotRepository.js";
@@ -15,6 +17,10 @@ import {
   type ComputeDemandSnapshotResult,
 } from "./computeDemandSnapshot.js";
 import {
+  computeRegionDemandSnapshot,
+  type ComputeRegionDemandSnapshotResult,
+} from "./computeRegionDemandSnapshot.js";
+import {
   buildForecastSnapshot,
   type BuildForecastSnapshotResult,
 } from "./buildForecastSnapshot.js";
@@ -23,7 +29,9 @@ export interface RunSalesForecastMvpDeps {
   db: DbHandle;
   wbClient: WbStatsClient;
   ordersRepository: WbOrdersDailyRepository;
+  ordersByRegionRepository: WbOrdersDailyByRegionRepository;
   demandRepository: WbDemandSnapshotRepository;
+  regionDemandRepository: WbRegionDemandSnapshotRepository;
   stockRepository: StockSnapshotRepository;
   supplyRepository: WbSupplyRepository;
   forecastRepository: WbForecastSnapshotRepository;
@@ -49,6 +57,7 @@ export interface RunSalesForecastMvpResult {
   ordersWindowTo: string;
   ordersImport: ImportWbOrdersResult;
   demandSnapshot: ComputeDemandSnapshotResult;
+  regionDemandSnapshot: ComputeRegionDemandSnapshotResult;
   forecasts: BuildForecastSnapshotResult[];
   durationMs: number;
 }
@@ -68,8 +77,8 @@ const DRY_RUN_SAVEPOINT = "sales_forecast_mvp_dry_run";
  * Dry-run is implemented via a SQLite savepoint + `ROLLBACK TO SAVEPOINT`
  * on the **same** DB connection **after** all steps complete successfully.
  * That rolls back writes to:
- * - `wb_orders_daily` (order import replace-by-day)
- * - `wb_demand_snapshots` (demand replace-by-date)
+ * - `wb_orders_daily` / `wb_orders_daily_by_region` (order import replace-by-day)
+ * - `wb_demand_snapshots` / `wb_region_demand_snapshots` (demand replace-by-date)
  * - `wb_forecast_snapshots` (forecast replace per horizon/scope)
  *
  * Rows written **before** the savepoint (e.g. a prior `pnpm import:stocks`
@@ -84,7 +93,9 @@ export async function runSalesForecastMvp(
     db,
     wbClient,
     ordersRepository,
+    ordersByRegionRepository,
     demandRepository,
+    regionDemandRepository,
     stockRepository,
     supplyRepository,
     forecastRepository,
@@ -123,6 +134,7 @@ export async function runSalesForecastMvp(
       {
         wbClient,
         repository: ordersRepository,
+        ordersByRegionRepository,
         logger,
         now,
       },
@@ -172,6 +184,28 @@ export async function runSalesForecastMvp(
       "WB sales forecast MVP: demand snapshot computed",
     );
 
+    const regionDemandSnapshot = await computeRegionDemandSnapshot(
+      {
+        ordersByRegionRepository,
+        regionDemandRepository,
+        logger,
+        now,
+      },
+      { snapshotDate, dryRun: false },
+    );
+
+    logger.info(
+      {
+        snapshotDate: regionDemandSnapshot.snapshotDate,
+        windowFrom: regionDemandSnapshot.windowFrom,
+        windowTo: regionDemandSnapshot.windowTo,
+        demandRows: regionDemandSnapshot.demandRows,
+        rowsInserted: regionDemandSnapshot.rowsInserted,
+        rowsDeleted: regionDemandSnapshot.rowsDeleted,
+      },
+      "WB sales forecast MVP: region demand snapshot computed",
+    );
+
     const forecasts: BuildForecastSnapshotResult[] = [];
     for (const horizonDays of horizons) {
       const forecast = await buildForecastSnapshot(
@@ -216,6 +250,7 @@ export async function runSalesForecastMvp(
       ordersWindowTo,
       ordersImport: patchDryRunFlag(ordersImport, dryRun),
       demandSnapshot: patchDryRunFlag(demandSnapshot, dryRun),
+      regionDemandSnapshot: patchDryRunFlag(regionDemandSnapshot, dryRun),
       forecasts: forecasts.map((forecast) => patchDryRunFlag(forecast, dryRun)),
       durationMs: Date.now() - t0,
     };

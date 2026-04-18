@@ -239,3 +239,38 @@ export function toWarehouseKeysSearchParams(f: ForecastUrlFormState): URLSearchP
     horizonDays: f.horizonDays,
   });
 }
+
+/**
+ * Параметры `GET /api/forecast/rows` для полного списка складов по одному SKU
+ * (сценарий «Перемещение между складами WB»). Не меняет дату/горизонт/риски формы.
+ */
+export function toWarehouseRowsForSkuParams(
+  f: ForecastUrlFormState,
+  nmId: string,
+  techSize: string,
+): URLSearchParams {
+  const merged: ForecastUrlFormState = {
+    ...f,
+    viewMode: "wbWarehouses",
+    q: nmId.trim(),
+    techSize: techSize.trim(),
+    warehouseKey: "",
+    rowLimit: "2000",
+  };
+  return toRowsSearchParams(merged);
+}
+
+/** Все строки `warehouse × SKU` только для выбранного склада (донор). */
+export function toDonorWarehouseRowsParams(
+  f: ForecastUrlFormState,
+  donorWarehouseKey: string,
+): URLSearchParams {
+  const merged: ForecastUrlFormState = {
+    ...f,
+    viewMode: "wbWarehouses",
+    warehouseKey: donorWarehouseKey.trim(),
+    q: "",
+    techSize: "",
+  };
+  return toRowsSearchParams(merged);
+}

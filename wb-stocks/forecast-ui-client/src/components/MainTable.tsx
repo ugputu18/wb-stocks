@@ -7,6 +7,7 @@ import {
   formatNum,
   riskLabelWbTotal,
 } from "../utils/forecastFormat.js";
+import { formatWarehouseWithRegion } from "../utils/wbWarehouseRegion.js";
 
 function wbCellClass(selected: boolean, explainFocus: ExplainFocus) {
   const base = "col-explain-wb col-metric-click";
@@ -113,7 +114,7 @@ function TheadWarehouses() {
           <br />
           уровней
         </th>
-        <th>Склад WB</th>
+        <th>Склад WB · регион</th>
         <th>nm_id</th>
         <th>vendor</th>
         <th>Дней запаса</th>
@@ -129,7 +130,7 @@ function TheadWarehouses() {
       <tr class="thead-hint-row">
         <TableHeadHintCell></TableHeadHintCell>
         <TableHeadHintCell>S / W / L</TableHeadHintCell>
-        <TableHeadHintCell></TableHeadHintCell>
+        <TableHeadHintCell>макрорегион из справочника</TableHeadHintCell>
         <TableHeadHintCell></TableHeadHintCell>
         <TableHeadHintCell></TableHeadHintCell>
         <TableHeadHintCell></TableHeadHintCell>
@@ -266,7 +267,12 @@ export function MainTable({
           <td class="risk-strip-cell">
             <RiskStrip inv={inv} />
           </td>
-          <td>{String(row.warehouseNameRaw ?? row.warehouseKey ?? "")}</td>
+          <td>
+            {formatWarehouseWithRegion(
+              row.warehouseNameRaw != null ? String(row.warehouseNameRaw) : null,
+              row.warehouseKey != null ? String(row.warehouseKey) : null,
+            )}
+          </td>
           <td>{String(row.nmId ?? "")}</td>
           <td>{String(row.vendorCode ?? "")}</td>
           <td>{formatNum(row.daysOfStock)}</td>

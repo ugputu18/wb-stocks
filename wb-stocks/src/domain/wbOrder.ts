@@ -55,6 +55,10 @@ export interface WbOrderUnit {
   isCancel: boolean;
   /** WB's internal order id (unique per ordered unit). */
   srid: string | null;
+  /** `regionName` из WB — регион заказа (buyer-side); для агрегата по регионам. */
+  regionNameRaw: string | null;
+  /** Нормализованный ключ региона (`<no-region>` если WB не прислал регион). */
+  regionKey: string;
 }
 
 /**
@@ -78,6 +82,25 @@ export interface WbOrdersDailyRecord {
   /** Orders cancelled by buyer / WB. */
   cancelledUnits: number;
   /** All rows seen for the key, regardless of cancellation. */
+  grossUnits: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
+/**
+ * Агрегат заказов по `(orderDate, regionKey, nmId, techSize)` → `wb_orders_daily_by_region`.
+ * Ключ: `(orderDate, regionKey, nmId, techSize)`.
+ */
+export interface WbOrdersDailyRegionRecord {
+  orderDate: string;
+  regionNameRaw: string | null;
+  regionKey: string;
+  nmId: number;
+  techSize: string;
+  vendorCode: string | null;
+  barcode: string | null;
+  units: number;
+  cancelledUnits: number;
   grossUnits: number;
   firstSeenAt: string;
   lastSeenAt: string;

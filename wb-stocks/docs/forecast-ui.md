@@ -13,7 +13,7 @@
 
 **Что доступно без каких-либо токенов**
 
-- **Основной UI (Preact):** `GET /` → `public/forecast-ui-next/index.html`; JS/CSS сборки — **`/next/assets/*`** (Vite `base: /next/`).
+- **Основной UI (Preact):** кастомные пути SPA (тот же `public/forecast-ui-next/index.html`): константы и `isKnownForecastRoute` — **`forecast-ui-client/src/routes.ts`** (реэкспорт из **`src/forecastUiRoutes.ts`**, общий с сервером). Пути: **`/`**, **`/redistribution`**, **`/warehouse-region-audit`**, **`/regional-demand-diagnostics`** (с завершающим `/` или без); JS/CSS сборки — **`/next/assets/*`** (Vite `base: /next/`).
 - **Legacy UI (vanilla, fallback / сравнение):** `GET /legacy` или **`/legacy/`** → `public/forecast-ui/index.html`; его статика — **`/static/*`** (`styles.css`, `app.js`).
 - Редирект **`/next` → `/`** (query string сохраняется) — для старых закладок; статика по-прежнему **`/next/...`**.
 - Если **`FORECAST_UI_TOKEN` не задан**: все **`/api/*`** доступны без заголовка (имеет смысл только на localhost).
@@ -69,6 +69,8 @@ pnpm serve:forecast-ui
 
 Интерфейс по умолчанию на Preact (корень **`/`**; исходники `forecast-ui-client/`, сборка в `public/forecast-ui-next/`) использует **единый набор примитивов** в `forecast-ui-client/src/components/hints/`: **`LabelWithInlineHelp`** + существующий **`HelpToggle`** для подписей полей, **`ActionHint`** под кнопками загрузки/экспорта, **`TableHeadHintCell`** / **`ColHintText`** для второй строки заголовка таблиц (те же классы `.label-with-help`, `.action-hint`, `.thead-hint-row` / `.col-hint`, стили в `hints.css`).
 
+**Макрорегионы складов WB (read-side):** **явный** справочник `warehouse_key` → макрорегион-кластер WB (логистический; не ОКАТО). Источник истины: **`wb-stocks/src/domain/wbWarehouseMacroRegion.ts`** (клиент реэкспортирует из `forecast-ui-client/src/utils/wbWarehouseRegion.ts`). Ключи совпадают с нормализацией имён в БД (`normalizeWarehouseName`). **Нет** угадывания по подстроке — только таблица. **`getWarehouseMacroRegion`** → `string | null`; без записи в таблице подписи показывают **`Не сопоставлен`** (не «—»): **`formatWarehouseWithRegion`**, **`formatWarehouseRegionFirst`**. Служебная страница **`GET /warehouse-region-audit`** — агрегаты по `wb_forecast_snapshots` и список складов без маппинга по убыванию Σ `forecast_daily_demand`; API **`GET /api/forecast/warehouse-region-audit?snapshotDate=&horizonDays=`**. Где ещё: **«По складам WB»**, фильтр **«Склад»**, **«Детали строки»**, панель сети по SKU, **`/redistribution`**. Ключи добавляем вручную по данным аудита.
+
 **Запланированные поставки:** в основной таблице и в supplier-таблице добавлены колонки **«Сток» / «Сток WB»** и **«В пути»** (incoming в горизонте симуляции); значения **в пути** выделены цветом (`.metric-incoming`), чтобы не путать с текущим остатком. В панели деталей и в explain — явная расшифровка **сток + в пути = доступно** для рекомендации «На WB» и контекста закупки.
 
 - **Заказ у поставщика:** строка берётся из последнего ответа **`GET /api/forecast/supplier-replenishment`**, сопоставляется по `(nm_id, tech_size)` с выбранной строкой основной таблицы.  
@@ -85,6 +87,74 @@ pnpm serve:forecast-ui
 При невозможности показать supplier-explain (нет строки в текущем списке витрины) выводится подсказка **сбросить фильтр или увеличить limit**; при перезагрузке таблицы или сбросе выбора строки explain и подсветка **очищаются**, чтобы не показывать устаревшие данные.
 
 **Ограничения:** не подменяет расчёт на сервере; возможны расхождения отображаемых промежуточных дробей с «ручным» умножением из‑за округления в полях ответа; supplier-расшифровка зависит от успешной загрузки `/supplier-replenishment` и совпадения фильтров отбора SKU.
+
+### Перемещение между складами WB (read-side MVP)
+
+Отдельная страница Preact: **`GET /redistribution`** или **`/redistribution/`** — тот же `index.html`, что и **`/`**; роутер в клиенте показывает сценарий перераспределения. С главной страницы прогноза есть ссылка «Перемещение между складами WB».
+
+**Fulfillment vs региональный спрос:** прогноз по складам (`forecastDailyDemand` в строках WB) считается из **`wb_demand_snapshots`** — это **спрос по складу исполнения** (агрегат заказов по `warehouseName`). Отдельный read-side слой **`wb_orders_daily_by_region`** → **`wb_region_demand_snapshots`** даёт **спрос по региону покупателя** (`regionName` в заказах WB); окна 7/30 и формулы сглаживания/trend — те же, что у `computeDemandSnapshot`, итоговое поле в БД — **`regional_forecast_daily_demand`**. На странице **`/redistribution`** по умолчанию **Regional**: **цель — макрорегион**; **донор** — склад. Объём перевода в регион опирается на **дефицит до целевого покрытия**, а не на «сырой» спрос: учитывается **Σ localAvailable** по складам целевого макрорегиона в уже загруженной сети SKU; **большой спрос без дефицита** не поднимает регион в топ. Режим **Fulfillment** — цель = **склад исполнения**, как раньше. Строки, где **макрорегион донора** совпадает с **макрорегионом цели** (межрегиональная логика), не показываются. Маппинг: склад → макрорегион — **`wbWarehouseMacroRegion.ts`**; регион заказа → макрорегион — **`wb_region_macro_region`** + bootstrap **`wbRegionMacroRegion.ts`**. Query **`rankingMode=fulfillment`** переключает на fulfillment. Верификация по SKU: **`GET /api/forecast/regional-demand-verify?…`**. Пакетный снимок: **`POST /api/forecast/regional-demand`**. Пересчёт регионального снимка входит в **`runSalesForecastMvp`** (без изменения **`wb_forecast_snapshots`**).
+
+#### Диагностика: региональный спрос vs fulfillment (вся сеть, без SKU)
+
+- **Страница:** **`GET /regional-demand-diagnostics`** — таблицы и KPI: суммы по `region_key` из **`wb_region_demand_snapshots`** (дата = `snapshotDate`), суммы fulfillment по макрорегиону склада из **`wb_forecast_snapshots`** для того же `snapshotDate` и **`horizonDays`** (30/60/90), сравнение по макрорегиону после явного mapping: регион покупателя → bootstrap + **`wb_region_macro_region`**; склад → **`wbWarehouseMacroRegion.ts`**. В сводке — **`regionalMappedShareOfRegional`** / **`regionalUnmappedShareOfRegional`**; несопоставленные `region_key` — отдельный блок (контроль качества).
+- **API:** **`GET /api/forecast/regional-vs-warehouse-summary?snapshotDate=YYYY-MM-DD&horizonDays=30|60|90`** — JSON: `regionalTotals`, `warehouseMacroRegionTotals`, `comparisonByMacroRegion` (сортировка по `|gapShare|` DESC), `totals` (в т.ч. mapped/unmapped доли), `unmappedRegionalTotals`. Pipeline не меняется.
+- **СНГ:** buyer-регионы РБ/КЗ/и др. в bootstrap маппятся в один макрорегион **«СНГ»**; fulfillment в `wb_forecast_snapshots` по-прежнему агрегируется по странам из **`wbWarehouseMacroRegion`** (Беларусь, Казахстан, …) — при сравнении `comparisonByMacroRegion` это осознанное расхождение меток.
+
+#### Диагностика: сырые заказы WB (drill-down, без записи в БД)
+
+В SQLite **нет** построчного хранения ответа WB: только агрегаты **`wb_orders_daily`** (по складу исполнения) и **`wb_orders_daily_by_region`** (по региону заказа), без связки region×warehouse на уровне единицы. Чтобы проверить гипотезу «**buyer `regionName` vs склад исполнения**», сервер forecast UI может **на лету** вызвать WB Statistics API (**`GET /api/v1/supplier/orders`**, тот же контракт, что **`importWbOrders`**) и вернуть JSON **read-only**. Требуется **`WB_TOKEN`** в окружении. Окно по полю **`date`** заказа (Moscow, как в импорте): **до 31 календарного дня** за один запрос; ответ WB может быть очень большим — в метаданных указываются **`pages`**, **`stoppedReason`**.
+
+- **`GET /api/forecast/raw-orders-diagnostics?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD`** — список нормализованных полей по строкам (в т.ч. `lastChangeDate`, `regionName` / `regionKey`, `oblastOkrugName`, `warehouseName` / `warehouseKey`, `isCancel`, `cancelDate`, `orderType`, `srid`). Опционально: **`nmId`**, **`vendorCode`**, фильтр подстроки **`regionName`** (по нормализованному имени или ключу), **`limit`** (по умолчанию 200, макс. 2000) — после фильтров, с начала списка.
+- **`GET /api/forecast/order-flow-by-region?dateFrom=&dateTo=`** — агрегат **`regionKey` × `warehouseKey`**: число net-единиц, доля **`shareWithinRegion`** внутри buyer-региона. Опционально **`nmId`**, **`vendorCode`**.
+- **`GET /api/forecast/order-flow-macro-matrix?dateFrom=&dateTo=`** — матрица **макрорегион покупателя** (из **`wbRegionMacroRegion`**: bootstrap + **`wb_region_macro_region`**) × **макрорегион склада** (**`wbWarehouseMacroRegion.ts`**) и net units; показывает, куда по кластерам «утекает» исполнение относительно региона заказа.
+
+**Интерпретация:** если для buyer-регионов Сибири/DV в матрице доминируют склады с **другим** макрорегионом исполнения — это ожидаемый сигнал перекоса между «спросом по региону заказа» и «спросом по складу исполнения» в `wb_demand_snapshots`. Сравнение с агрегатами по снимкам (`regional-vs-warehouse-summary`) дополняет, но не заменяет, raw-проверку.
+
+#### Страница «один донорский склад WB» (текущий MVP)
+
+Пользователь выбирает **только склад-донор** и параметры расчёта (дата среза, горизонт, `targetCoverageDays`, лимит строк, резерв донора в днях, минимум передаваемых шт., максимум SKU для догрузки сети). **Не нужно** выбирать SKU заранее.
+
+**Данные:**
+
+1. **Строки донора:** `GET /api/forecast/rows` с **`viewMode=wbWarehouses`**, **`warehouseKey=<warehouse_key донора>`**, **`limit`** из формы (до 2000) — все SKU, у которых есть строка на этом складе.
+
+2. **По каждому SKU с излишком:** отдельный запрос с **`viewMode=wbWarehouses`**, **`q=<nm_id>`**, **`techSize=<размер>`**, **`limit=2000`** — полная сеть складов для этого SKU (как в одно-SKU сценарии). Чтобы не делать запрос на каждый артикул в базе, UI берёт только **топ N SKU** по **`donorTransferableUnits`** (параметр «макс. SKU»), по умолчанию **100**.
+
+3. **Региональный снимок** (при ranking **Regional**, режим по умолчанию): **`POST /api/forecast/regional-demand`** — строки **`wb_region_demand_snapshots`** по тем же SKU, что и топ по излишку, плюс **`regionMacroMap`** (bootstrap + **`wb_region_macro_region`**); клиент агрегирует в **`targetRegionalDemand` = Σ по макрорегиону** для **`(nm_id, tech_size)`**. URL без параметра или **`rankingMode=regional`** — regional; **`rankingMode=fulfillment`** — только fulfillment-сигнал.
+
+**Формулы на строке донора:**
+
+- **`donorReserveUnits`** = `forecastDailyDemand × donorReserveDays` по строке склада-донора.
+- **`donorTransferableUnits`** = `max(0, localAvailable − donorReserveUnits)`.
+- Учитываются только SKU, где **`donorTransferableUnits ≥ minTransferableUnits`** (параметр UI).
+
+**Региональный режим (по умолчанию):** строка рекомендации — **SKU × донор × макрорегион назначения** (read model: **`computeDonorMacroRegionRecommendations`**). Для каждого макрорегиона с **`targetRegionalDemand`** > 0 (Σ по buyer-регионам), если макрорегион донора **≠** макрорегиона цели:
+
+- **`regionalAvailableUnits`** = Σ **`localAvailable`** по строкам сети SKU по складам, отнесённым к этому макрорегиону (**`wbWarehouseMacroRegion`**), **без** склада-донора.
+- **`regionalDaysOfStock`** = `regionalAvailableUnits / targetRegionalDemand` (при спросе > 0).
+- **`targetCoverageStockUnits`** = `ceil(targetRegionalDemand × targetCoverageDays)` (дни покрытия — из формы).
+- **`regionalNeedUnits`** = `max(0, ceil(targetCoverageStockUnits − regionalAvailableUnits))`. Строки с **`regionalNeedUnits`** = 0 не показываются («сытый» регион).
+- **`recommendedTransferUnitsToRegion`** = `min(donorTransferableUnits, regionalNeedUnits)`.
+- **`transferScore`** = `recommendedTransferUnitsToRegion × targetRegionalDemand`.
+
+Склады WB в целевом макрорегионе — **кандидаты**; **`preferredWarehouseKey`** — max **recommendedToWB** среди кандидатов (подсказка, **не** лимит перевода). В таблице regional-рекомендаций у названия макрорегиона есть кнопка **«Склады»**: по клику (без hover-only) открывается компактный блок со списком тех же складов-кандидатов, рекомендуемым складом и коротким пояснением; по повторному клику или клику вне блока блок закрывается. Это **операционная подсказка** для логистики; источник спроса остаётся buyer-region / макрорегион.
+
+**Режим Fulfillment:** для каждого **склада-получателя** с тем же **`(nm_id, tech_size)`**, где **`warehouse_key ≠ донор`** и **`recommendedToWB > 0`**:
+
+- **`recommendedTransferUnits`** = `min(donorTransferableUnits, recommendedToWB)` — **независимо** по каждой паре; нет глобального распределения одного остатка донора между получателями.
+- **`transferScore`** = `recommendedTransferUnits × targetForecastDailyDemand`.
+
+**Сортировка:** **regional** — в коде клиента: **`regionalDaysOfStock` ASC** (меньше дней — выше), затем **`targetRegionalDemand` DESC**, затем **`transferScore` DESC**, затем объём перевода. **Fulfillment** — `transferScore` **DESC**, **`targetRankingDemand`**, **`targetForecastDailyDemand`**, `targetDaysOfStock` **ASC**, `targetRecommendedToWB` **DESC**. Колонка **«Ранг»** — порядковый номер.
+
+**Сводка по складу-донору (верификация, не для расчёта):** после выбора донора UI показывает отдельную карточку под параметрами. Данные — те же `GET /api/forecast/rows` с фильтром донора, что и для расчёта: **Σ `localAvailable`**, **Σ `forecastDailyDemand`**, оценка **«дней покрытия» по складу в целом** = `totalLocalStock / totalForecastDailyDemand` при `totalForecastDailyDemand > 0`, иначе «—». Это **не** min/max `daysOfStock` по SKU; нужно только для быстрой проверки масштаба. **Число SKU с передаваемым излишком** — счётчик строк, где `donorTransferableUnits ≥ min` при текущих «резерв донора» и «мин. передаваемых шт.» (те же правила, что и расчёт рекомендаций). Сводка обновляется при смене донора, даты среза, горизонта, `targetCoverageDays`, лимита строк и параметров резерва/минимума.
+
+**Таблица «Товары донора»:** под сводкой — полный список SKU×размер по строкам ответа для выбранного склада. Колонки: `vendorCode`, `nm_id`, размер, `localAvailable`, `incomingUnits`, **всего на складе** = `localAvailable + incomingUnits`, `forecastDailyDemand`, `daysOfStock`, **`donorReserveUnits`** = `forecastDailyDemand × donorReserveDays`, **`donorTransferableUnits`** = `max(0, localAvailable − donorReserveUnits)` (как в расчёте перераспределения; резерв по **локальному** остатку, без вычитания incoming). Сортировка по умолчанию: **`donorTransferableUnits` DESC**, затем **`forecastDailyDemand` DESC**. Клик по строке открывает ту же **inline-панель сети по SKU**, что и клик по рекомендации; в **Fulfillment** подсвечивается склад-получатель из первой подходящей строки рекомендации, в **Regional** — макрорегион назначения и предпочтительный склад (если есть). Строки рекомендаций с тем же `(nm_id, tech_size)` подсвечиваются. Если ответ API по донору пустой — текст: «На выбранном складе нет SKU с данными для перераспределения».
+
+**Сеть по SKU (inline-панель):** строки таблицы **рекомендаций** и таблицы **«Товары донора»** **кликабельны**. По клику открывается блок под таблицей (не модалка, не новая страница): тот же запрос, что и для догрузки сети при расчёте — `GET /api/forecast/rows` с **`viewMode=wbWarehouses`**, **`q=<nm_id>`**, **`techSize=<размер>`**, **`limit`** из формы. Показываются по складам: название, `localAvailable`, `incomingUnits`, сумма «всего на складе» (local + incoming), `forecastDailyDemand`, `daysOfStock`, `recommendedToWB`, опционально **`stockout_date`** как «OOS (дата)». Помечаются **текущий донор**; в режиме **Fulfillment** — **получатель** (склад из строки). В режиме **Regional** — склады **макрорегиона назначения** (buyer-макрорегион из рекомендации) и отдельно **предпочтительный склад** (max «На WB» среди кандидатов); строки с потребностью довоза на WB (`recommendedToWB > 0`) визуально подсвечены. Кэш ответа по `(nm_id, tech_size)` в памяти вкладки сбрасывается при смене даты среза, горизонта, `targetCoverageDays` или лимита строк.
+
+**Список складов в селекторе:** при загрузке страницы для каждого **`warehouse_key`** из `GET /api/forecast/warehouse-keys` выполняется тот же запрос, что и для донора (с ограниченным параллелизмом), и в подписи опции показываются сумма **`localAvailable`** по строкам и число SKU — **ориентир** избытка без отдельного SQL.
+
+**Ограничения MVP:** эвристика и ranking, не solver; логистика/стоимость/время перемещения не учитываются; решения не сохраняются в БД.
 
 ### Режим основной таблицы WB (`viewMode`)
 

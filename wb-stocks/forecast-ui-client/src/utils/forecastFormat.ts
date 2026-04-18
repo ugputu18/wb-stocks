@@ -1,15 +1,38 @@
-/** Integer display — same rules as legacy `formatInt`. */
-export function formatInt(x: unknown): string {
-  if (x == null || Number.isNaN(x)) return "—";
-  if (typeof x === "number") return String(Math.round(x));
+/** Round to one decimal place for UI (days, шт., rates). */
+function roundToTenths(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/** Единое отображение чисел: округление до десятых (дни, штуки, спрос/день). */
+function formatTenthsDisplay(x: unknown): string {
+  if (x == null) return "—";
+  if (typeof x === "number") {
+    if (Number.isNaN(x) || !Number.isFinite(x)) return "—";
+    return roundToTenths(x).toFixed(1);
+  }
+  if (typeof x === "string") {
+    const t = x.trim();
+    if (t === "") return "—";
+    const n = Number(t);
+    if (Number.isFinite(n)) return roundToTenths(n).toFixed(1);
+    return x;
+  }
+  if (typeof x === "bigint") {
+    return roundToTenths(Number(x)).toFixed(1);
+  }
+  const n = Number(x);
+  if (Number.isFinite(n)) return roundToTenths(n).toFixed(1);
   return String(x);
 }
 
-/** Decimal trim — same as legacy `formatNum`. */
+/** Штуки и целочисленные метрики — до десятых. */
+export function formatInt(x: unknown): string {
+  return formatTenthsDisplay(x);
+}
+
+/** Дни, спрос/день, коэффициенты — до десятых. */
 export function formatNum(x: unknown): string {
-  if (x == null || Number.isNaN(x)) return "—";
-  if (typeof x === "number") return x.toFixed(4).replace(/\.?0+$/, "");
-  return String(x);
+  return formatTenthsDisplay(x);
 }
 
 export function badgeClass(risk: unknown): string {
@@ -23,7 +46,7 @@ export function badgeClass(risk: unknown): string {
   return m[k] || "badge-ok";
 }
 
-/** Как legacy `formatDetailVal` для dd. */
+/** Числа в деталях — те же правила (до десятых). */
 export function formatDetailVal(v: unknown): string {
   if (v == null) return "—";
   if (typeof v === "number") return formatNum(v);

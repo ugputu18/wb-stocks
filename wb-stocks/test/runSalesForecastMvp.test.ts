@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { openDatabase } from "../src/infra/db.js";
 import { WbOrdersDailyRepository } from "../src/infra/wbOrdersDailyRepository.js";
+import { WbOrdersDailyByRegionRepository } from "../src/infra/wbOrdersDailyByRegionRepository.js";
 import { WbDemandSnapshotRepository } from "../src/infra/wbDemandSnapshotRepository.js";
+import { WbRegionDemandSnapshotRepository } from "../src/infra/wbRegionDemandSnapshotRepository.js";
 import { StockSnapshotRepository } from "../src/infra/stockSnapshotRepository.js";
 import { WbSupplyRepository } from "../src/infra/wbSupplyRepository.js";
 import { WbForecastSnapshotRepository } from "../src/infra/wbForecastSnapshotRepository.js";
@@ -68,7 +70,9 @@ describe("runSalesForecastMvp", () => {
   const logger = silentLogger();
   let db: ReturnType<typeof openDatabase>;
   let ordersRepository: WbOrdersDailyRepository;
+  let ordersByRegionRepository: WbOrdersDailyByRegionRepository;
   let demandRepository: WbDemandSnapshotRepository;
+  let regionDemandRepository: WbRegionDemandSnapshotRepository;
   let stockRepository: StockSnapshotRepository;
   let supplyRepository: WbSupplyRepository;
   let forecastRepository: WbForecastSnapshotRepository;
@@ -76,7 +80,9 @@ describe("runSalesForecastMvp", () => {
   beforeEach(() => {
     db = openDatabase(":memory:");
     ordersRepository = new WbOrdersDailyRepository(db);
+    ordersByRegionRepository = new WbOrdersDailyByRegionRepository(db);
     demandRepository = new WbDemandSnapshotRepository(db);
+    regionDemandRepository = new WbRegionDemandSnapshotRepository(db);
     stockRepository = new StockSnapshotRepository(db);
     supplyRepository = new WbSupplyRepository(db);
     forecastRepository = new WbForecastSnapshotRepository(db);
@@ -91,7 +97,9 @@ describe("runSalesForecastMvp", () => {
         db,
         wbClient,
         ordersRepository,
+        ordersByRegionRepository,
         demandRepository,
+        regionDemandRepository,
         stockRepository,
         supplyRepository,
         forecastRepository,
@@ -108,11 +116,15 @@ describe("runSalesForecastMvp", () => {
     expect(result.ordersWindowTo).toBe("2026-04-16");
     expect(result.horizons).toEqual([30, 60]);
     expect(result.ordersImport.rowsInserted).toBe(1);
+    expect(result.ordersImport.regionRowsInserted).toBe(1);
     expect(result.demandSnapshot.rowsInserted).toBe(1);
+    expect(result.regionDemandSnapshot.rowsInserted).toBe(1);
     expect(result.forecasts.map((f) => f.horizonDays)).toEqual([30, 60]);
     expect(result.forecasts.every((f) => f.rowsInserted === 1)).toBe(true);
     expect(ordersRepository.countAll()).toBe(1);
+    expect(ordersByRegionRepository.getRange("2026-03-18", "2026-04-16").length).toBe(1);
     expect(demandRepository.countForDate("2026-04-17")).toBe(1);
+    expect(regionDemandRepository.countForDate("2026-04-17")).toBe(1);
     expect(forecastRepository.countForKey("2026-04-17", 30)).toBe(1);
     expect(forecastRepository.countForKey("2026-04-17", 60)).toBe(1);
   });
@@ -125,7 +137,9 @@ describe("runSalesForecastMvp", () => {
         db,
         wbClient,
         ordersRepository,
+        ordersByRegionRepository,
         demandRepository,
+        regionDemandRepository,
         stockRepository,
         supplyRepository,
         forecastRepository,
@@ -142,12 +156,15 @@ describe("runSalesForecastMvp", () => {
     expect(result.dryRun).toBe(true);
     expect(result.ordersImport.dryRun).toBe(true);
     expect(result.demandSnapshot.dryRun).toBe(true);
+    expect(result.regionDemandSnapshot.dryRun).toBe(true);
     expect(result.forecasts[0]!.dryRun).toBe(true);
     expect(result.ordersImport.rowsInserted).toBe(1);
     expect(result.demandSnapshot.rowsInserted).toBe(1);
+    expect(result.regionDemandSnapshot.rowsInserted).toBe(1);
     expect(result.forecasts[0]!.rowsInserted).toBe(1);
     expect(ordersRepository.countAll()).toBe(0);
     expect(demandRepository.countForDate("2026-04-17")).toBe(0);
+    expect(regionDemandRepository.countForDate("2026-04-17")).toBe(0);
     expect(forecastRepository.countForKey("2026-04-17", 30)).toBe(0);
   });
 
@@ -162,7 +179,9 @@ describe("runSalesForecastMvp", () => {
         db,
         wbClient,
         ordersRepository,
+        ordersByRegionRepository,
         demandRepository,
+        regionDemandRepository,
         stockRepository,
         supplyRepository,
         forecastRepository,

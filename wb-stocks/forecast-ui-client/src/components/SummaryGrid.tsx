@@ -1,5 +1,6 @@
 import type { JSX } from "preact";
 import type { ForecastSummaryResponse, ForecastViewMode } from "../api/types.js";
+import { formatNum } from "../utils/forecastFormat.js";
 
 interface Props {
   data: ForecastSummaryResponse;
@@ -7,16 +8,22 @@ interface Props {
   viewMode: ForecastViewMode;
 }
 
+/** «Строк» в KPI — целые; суммы в шт. — до десятых (как в таблицах). */
+type SummaryNumberKind = "rowCount" | "pieces";
+
 function cell(
   label: string,
   value: unknown,
   cls: string,
   title: string,
   muted?: boolean,
+  numberKind: SummaryNumberKind = "pieces",
 ): JSX.Element {
   const v =
     typeof value === "number"
-      ? String(value)
+      ? numberKind === "rowCount"
+        ? String(Math.round(value))
+        : formatNum(value)
       : value == null
         ? "—"
         : String(value);
@@ -57,30 +64,40 @@ export function SummaryGrid({ data, viewMode }: Props) {
         : vm === "systemTotal"
           ? "Число строк SKU в режиме «Запасы в целом» (как в таблице)."
           : "Число строк SKU (nm_id×размер) в режиме WB в целом после фильтров.",
+      undefined,
+      "rowCount",
     ),
     cell(
       "Critical · запас < 7 дн.",
       r.critical,
       "risk-critical",
       `Строк с целыми днями запаса < 7 (${vm === "systemTotal" ? "по system" : "в текущем виде"}) и фильтре (bucket critical).`,
+      undefined,
+      "rowCount",
     ),
     cell(
       "Warning · [7, 14) дн.",
       r.warning,
       "risk-warning",
       "Строк в диапазоне [7; 14) дней покрытия (bucket warning).",
+      undefined,
+      "rowCount",
     ),
     cell(
       "Attention · [14, 30) дн.",
       r.attention,
       "risk-attention",
       "Строк в диапазоне [14; 30) дней покрытия (bucket attention).",
+      undefined,
+      "rowCount",
     ),
     cell(
       "OK ≥30",
       r.ok,
       "risk-ok",
       "Строк с покрытием не менее 30 дней (bucket ok).",
+      undefined,
+      "rowCount",
     ),
   ];
 
@@ -159,6 +176,7 @@ export function SummaryGrid({ data, viewMode }: Props) {
       "",
       "Строк, у которых дата stock_snapshot_at старше выбранной snapshotDate (построчно или по SKU в режиме WB в целом — см. сервер).",
       true,
+      "rowCount",
     ),
     cell(
       "Сток snapshot min",

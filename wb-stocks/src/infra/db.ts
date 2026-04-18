@@ -191,6 +191,56 @@ const MIGRATIONS: readonly string[] = [
      ON wb_forecast_snapshots (nm_id)`,
   `CREATE INDEX IF NOT EXISTS ix_wb_forecast_snapshots_warehouse
      ON wb_forecast_snapshots (warehouse_key)`,
+  `CREATE TABLE IF NOT EXISTS wb_orders_daily_by_region (
+     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+     order_date         TEXT    NOT NULL,
+     region_name_raw    TEXT,
+     region_key         TEXT    NOT NULL,
+     nm_id              INTEGER NOT NULL,
+     tech_size          TEXT    NOT NULL,
+     vendor_code        TEXT,
+     barcode            TEXT,
+     units              INTEGER NOT NULL,
+     cancelled_units    INTEGER NOT NULL DEFAULT 0,
+     gross_units        INTEGER NOT NULL,
+     first_seen_at      TEXT    NOT NULL,
+     last_seen_at       TEXT    NOT NULL
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS ux_wb_orders_daily_by_region_key
+     ON wb_orders_daily_by_region (order_date, region_key, nm_id, tech_size)`,
+  `CREATE INDEX IF NOT EXISTS ix_wb_orders_daily_by_region_date
+     ON wb_orders_daily_by_region (order_date)`,
+  `CREATE INDEX IF NOT EXISTS ix_wb_orders_daily_by_region_nm_id
+     ON wb_orders_daily_by_region (nm_id)`,
+  `CREATE TABLE IF NOT EXISTS wb_region_demand_snapshots (
+     id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+     snapshot_date          TEXT    NOT NULL,
+     region_name_raw        TEXT,
+     region_key             TEXT    NOT NULL,
+     nm_id                  INTEGER NOT NULL,
+     tech_size              TEXT    NOT NULL,
+     vendor_code            TEXT,
+     barcode                TEXT,
+     units7                 INTEGER NOT NULL,
+     units30                INTEGER NOT NULL,
+     avg_daily_7            REAL    NOT NULL,
+     avg_daily_30           REAL    NOT NULL,
+     base_daily_demand      REAL    NOT NULL,
+     trend_ratio            REAL    NOT NULL,
+     trend_ratio_clamped    REAL    NOT NULL,
+     regional_forecast_daily_demand REAL NOT NULL,
+     computed_at            TEXT    NOT NULL
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS ux_wb_region_demand_snapshots_key
+     ON wb_region_demand_snapshots (snapshot_date, region_key, nm_id, tech_size)`,
+  `CREATE INDEX IF NOT EXISTS ix_wb_region_demand_snapshots_date
+     ON wb_region_demand_snapshots (snapshot_date)`,
+  `CREATE INDEX IF NOT EXISTS ix_wb_region_demand_snapshots_nm_id
+     ON wb_region_demand_snapshots (nm_id)`,
+  `CREATE TABLE IF NOT EXISTS wb_region_macro_region (
+     region_key   TEXT PRIMARY KEY,
+     macro_region TEXT NOT NULL
+   )`,
 ];
 
 export function openDatabase(path: string): DbHandle {
@@ -201,7 +251,21 @@ export function openDatabase(path: string): DbHandle {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   runMigrations(db);
+  migrateRegionDemandSnapshotColumn(db);
   return db;
+}
+
+/** Старые БД: колонка `forecast_daily_demand` → `regional_forecast_daily_demand`. */
+function migrateRegionDemandSnapshotColumn(db: DbHandle): void {
+  const rows = db
+    .prepare("PRAGMA table_info(wb_region_demand_snapshots)")
+    .all() as { name: string }[];
+  const names = new Set(rows.map((r) => r.name));
+  if (names.has("forecast_daily_demand") && !names.has("regional_forecast_daily_demand")) {
+    db.exec(
+      `ALTER TABLE wb_region_demand_snapshots RENAME COLUMN forecast_daily_demand TO regional_forecast_daily_demand`,
+    );
+  }
 }
 
 function runMigrations(db: DbHandle): void {

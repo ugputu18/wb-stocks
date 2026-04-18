@@ -4,6 +4,7 @@ import { HelpToggle } from "./HelpToggle.js";
 import { ActionHint, LabelWithInlineHelp } from "./hints/index.js";
 import type { LoadStatus } from "../state/forecastPageState.js";
 import type { ForecastUrlFormState } from "../state/urlState.js";
+import { formatWarehouseWithRegion } from "../utils/wbWarehouseRegion.js";
 
 export interface FiltersFormProps {
   form: ForecastUrlFormState;
@@ -254,7 +255,7 @@ export function FiltersForm(props: FiltersFormProps): JSX.Element {
               <option value="">Все</option>
               {(warehouseKeys ?? []).map((k) => (
                 <option key={k} value={k}>
-                  {k}
+                  {formatWarehouseWithRegion(k, k)}
                 </option>
               ))}
             </select>

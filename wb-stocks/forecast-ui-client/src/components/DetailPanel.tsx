@@ -9,6 +9,7 @@ import { formatDetailVal, formatInt, formatNum } from "../utils/forecastFormat.j
 import type { DetailViewKind } from "../utils/detailViewKind.js";
 import { resolveDetailViewKind } from "../utils/detailViewKind.js";
 import { findSupplierRow } from "../utils/supplierLookup.js";
+import { formatWarehouseWithRegion } from "../utils/wbWarehouseRegion.js";
 import { DetailExplainSection } from "./explain/DetailExplainSection.js";
 import type { WbExplainCtx } from "./explain/WbReplenishExplain.js";
 
@@ -136,7 +137,13 @@ export function DetailPanel({ row, viewMode, explainFocus, supplierRows }: Props
   } else {
     pairs.push(
       ["Bucket риска", r.risk],
-      ["Склад (как в WB)", r.warehouseNameRaw ?? r.warehouseKey],
+      [
+        "Склад (как в WB)",
+        formatWarehouseWithRegion(
+          r.warehouseNameRaw != null ? String(r.warehouseNameRaw) : null,
+          r.warehouseKey != null ? String(r.warehouseKey) : null,
+        ),
+      ],
       ["nm_id", r.nmId],
       ["Размер", r.techSize],
       ["vendor_code", r.vendorCode],
@@ -190,7 +197,7 @@ export function DetailPanel({ row, viewMode, explainFocus, supplierRows }: Props
     }
     pairs.push(
       ["Прогноз продаж (шт., горизонт)", formatDetailVal(r.forecastUnits)],
-      ["Дней запаса (целых)", formatDetailVal(r.daysOfStock)],
+      ["Дней запаса", formatDetailVal(r.daysOfStock)],
       ["Дата исчерпания (если есть)", r.stockoutDate ?? "—"],
       ["computed_at", r.computedAt ?? "—"],
     );

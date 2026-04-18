@@ -3,6 +3,7 @@ import {
   type WbOrderUnit,
 } from "../domain/wbOrder.js";
 import { warehouseKey } from "../domain/warehouseName.js";
+import { wbRegionKey } from "../domain/wbRegionKey.js";
 
 export type MapOrderResult =
   | { ok: true; value: WbOrderUnit }
@@ -42,6 +43,8 @@ export function mapWbOrderRow(raw: unknown): MapOrderResult {
       lastChangeDate: nullableString(r.lastChangeDate),
       warehouseNameRaw: nullableString(r.warehouseName),
       warehouseKey: warehouseKey(r.warehouseName),
+      regionNameRaw: nullableString(r.regionName),
+      regionKey: wbRegionKey(r.regionName),
       nmId: r.nmId,
       techSize: normalizeTechSize(r.techSize),
       vendorCode: nullableString(r.supplierArticle),

@@ -36,7 +36,7 @@ export function SupplierOrderExplain({ row: s }: { row: Record<string, unknown> 
         <>
           <br />
           Дефицит: <strong>{formatNum(deficitD)}</strong> дн. (разница срока поставки{" "}
-          <strong>{formatInt(lt)}</strong> дн. и запаса <strong>{formatNum(xNum)}</strong> дн.).
+          <strong>{formatNum(lt)}</strong> дн. и запаса <strong>{formatNum(xNum)}</strong> дн.).
         </>
       );
     } else if (!xOk) {
@@ -52,7 +52,7 @@ export function SupplierOrderExplain({ row: s }: { row: Record<string, unknown> 
         <strong>⚠️ Дефицит до прихода поставки</strong>
         <br />
         Запас закончится через <strong>{xOk ? formatNum(xNum) : "—"}</strong> дн., поставка через{" "}
-        <strong>{formatInt(lt)}</strong> дн.{extra}
+        <strong>{formatNum(lt)}</strong> дн.{extra}
       </div>
     );
   } else {

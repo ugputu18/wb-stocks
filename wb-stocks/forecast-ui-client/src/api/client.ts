@@ -1,8 +1,11 @@
 import type {
   ForecastRowsResponse,
   ForecastSummaryResponse,
+  RegionalDemandResponse,
+  RegionalVsWarehouseSummaryResponse,
   SupplierReplenishmentResponse,
   WarehouseKeysResponse,
+  WarehouseRegionAuditResponse,
 } from "./types.js";
 
 export interface ApiOptions extends RequestInit {
@@ -128,6 +131,43 @@ export async function fetchWarehouseKeys(
 ): Promise<WarehouseKeysResponse> {
   return apiJson<WarehouseKeysResponse>(
     `/api/forecast/warehouse-keys${buildApiSearchParams(sp)}`,
+    { bearerToken: token },
+  );
+}
+
+export interface FetchRegionalDemandBody {
+  snapshotDate: string;
+  skus: Array<{ nmId: number; techSize: string }>;
+}
+
+export async function fetchRegionalDemand(
+  body: FetchRegionalDemandBody,
+  token?: string,
+): Promise<RegionalDemandResponse> {
+  return apiJson<RegionalDemandResponse>("/api/forecast/regional-demand", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    bearerToken: token,
+  });
+}
+
+export async function fetchWarehouseRegionAudit(
+  sp: URLSearchParams,
+  token?: string,
+): Promise<WarehouseRegionAuditResponse> {
+  return apiJson<WarehouseRegionAuditResponse>(
+    `/api/forecast/warehouse-region-audit${buildApiSearchParams(sp)}`,
+    { bearerToken: token },
+  );
+}
+
+export async function fetchRegionalVsWarehouseSummary(
+  sp: URLSearchParams,
+  token?: string,
+): Promise<RegionalVsWarehouseSummaryResponse> {
+  return apiJson<RegionalVsWarehouseSummaryResponse>(
+    `/api/forecast/regional-vs-warehouse-summary${buildApiSearchParams(sp)}`,
     { bearerToken: token },
   );
 }

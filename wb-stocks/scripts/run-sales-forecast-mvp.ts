@@ -4,7 +4,9 @@ import { logger } from "../src/logger.js";
 import { openDatabase } from "../src/infra/db.js";
 import { WbStatsClient } from "../src/infra/wbStatsClient.js";
 import { WbOrdersDailyRepository } from "../src/infra/wbOrdersDailyRepository.js";
+import { WbOrdersDailyByRegionRepository } from "../src/infra/wbOrdersDailyByRegionRepository.js";
 import { WbDemandSnapshotRepository } from "../src/infra/wbDemandSnapshotRepository.js";
+import { WbRegionDemandSnapshotRepository } from "../src/infra/wbRegionDemandSnapshotRepository.js";
 import { StockSnapshotRepository } from "../src/infra/stockSnapshotRepository.js";
 import { WbSupplyRepository } from "../src/infra/wbSupplyRepository.js";
 import { WbForecastSnapshotRepository } from "../src/infra/wbForecastSnapshotRepository.js";
@@ -141,7 +143,9 @@ async function main(): Promise<void> {
         db,
         wbClient,
         ordersRepository: new WbOrdersDailyRepository(db),
+        ordersByRegionRepository: new WbOrdersDailyByRegionRepository(db),
         demandRepository: new WbDemandSnapshotRepository(db),
+        regionDemandRepository: new WbRegionDemandSnapshotRepository(db),
         stockRepository: new StockSnapshotRepository(db),
         supplyRepository: new WbSupplyRepository(db),
         forecastRepository: new WbForecastSnapshotRepository(db),

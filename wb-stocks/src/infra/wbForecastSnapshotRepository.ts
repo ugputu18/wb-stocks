@@ -157,6 +157,51 @@ export class WbForecastSnapshotRepository {
   }
 
   /**
+   * Агрегаты по складу для аудита маппинга макрорегионов (строки прогноза = SKU×склад).
+   */
+  aggregateWarehouseMetricsPerWarehouse(
+    snapshotDate: string,
+    horizonDays: number,
+  ): Array<{
+    warehouseKey: string;
+    warehouseNameRaw: string | null;
+    rowCount: number;
+    sumForecastDailyDemand: number;
+    sumStartStock: number;
+    sumIncomingUnits: number;
+  }> {
+    const rows = this.db
+      .prepare(
+        `SELECT warehouse_key AS warehouseKey,
+                MAX(warehouse_name_raw) AS warehouseNameRaw,
+                COUNT(*) AS rowCount,
+                SUM(forecast_daily_demand) AS sumForecastDailyDemand,
+                SUM(start_stock) AS sumStartStock,
+                SUM(incoming_units) AS sumIncomingUnits
+           FROM wb_forecast_snapshots
+          WHERE snapshot_date = ? AND horizon_days = ?
+          GROUP BY warehouse_key
+          ORDER BY warehouse_key`,
+      )
+      .all(snapshotDate, horizonDays) as Array<{
+      warehouseKey: string;
+      warehouseNameRaw: string | null;
+      rowCount: number;
+      sumForecastDailyDemand: number;
+      sumStartStock: number;
+      sumIncomingUnits: number;
+    }>;
+    return rows.map((r) => ({
+      warehouseKey: r.warehouseKey,
+      warehouseNameRaw: r.warehouseNameRaw,
+      rowCount: r.rowCount,
+      sumForecastDailyDemand: Number(r.sumForecastDailyDemand ?? 0),
+      sumStartStock: Number(r.sumStartStock ?? 0),
+      sumIncomingUnits: Number(r.sumIncomingUnits ?? 0),
+    }));
+  }
+
+  /**
    * Report rows with optional filters. Default sort: `days_of_stock` ASC,
    * `forecast_daily_demand` DESC.
    *

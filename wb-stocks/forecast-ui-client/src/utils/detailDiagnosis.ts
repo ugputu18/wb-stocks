@@ -1,4 +1,5 @@
 import type { ForecastViewMode } from "../api/types.js";
+import { formatInt } from "./forecastFormat.js";
 import type { DetailViewKind } from "./detailViewKind.js";
 import { resolveDetailViewKind } from "./detailViewKind.js";
 
@@ -95,14 +96,14 @@ export function detailActionLine(
 
   if (explainFocus === "wb") {
     const n = Number(rp?.recommendedToWB ?? 0);
-    return `Действие: довезти на WB — до ${n} шт. (оценка по целевому покрытию).`;
+    return `Действие: довезти на WB — до ${formatInt(n)} шт. (оценка по целевому покрытию).`;
   }
   if (explainFocus === "supplier") {
     const sup = supplierRow;
     const fromSup = sup ? Number(sup.recommendedFromSupplier ?? 0) : 0;
     const ord = sup ? Number(sup.recommendedOrderQty ?? 0) : 0;
     if (sup) {
-      return `Действие: заказ у производителя — простая рекомендация ${fromSup} шт.; заказ (LT) ${ord} шт.`;
+      return `Действие: заказ у производителя — простая рекомендация ${formatInt(fromSup)} шт.; заказ (LT) ${formatInt(ord)} шт.`;
     }
     return "Действие: откройте закупку по SKU в таблице ниже или смените режим таблицы.";
   }

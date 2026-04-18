@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef } from "preact/hooks";
+import { FORECAST_UI_SPA_ROUTES } from "./routes.js";
 import { ActionsBar } from "./components/ActionsBar.js";
 import { DetailPanel } from "./components/DetailPanel.js";
 import { FiltersForm } from "./components/FiltersForm.js";
@@ -90,8 +91,12 @@ export function App() {
       <header class="top">
         <h1>WB sales forecast</h1>
         <p class="muted">
-          Summary + основная таблица + закупка. Старый экран (reference):{" "}
-          <a href="/legacy">/legacy</a>
+          Summary + основная таблица + закупка.{" "}
+          <a href={FORECAST_UI_SPA_ROUTES.redistribution}>Перемещение между складами WB</a>
+          {" · "}
+          <a href={FORECAST_UI_SPA_ROUTES.regionalDemandDiagnostics}>Регион vs fulfillment</a>
+          {" · "}
+          Старый экран (reference): <a href="/legacy">/legacy</a>
         </p>
       </header>
 
@@ -180,7 +185,6 @@ export function App() {
       <style>{`
         .forecast-next-root { max-width: 1400px; margin: 0 auto; padding: 0 1.25rem 3rem; }
         #status { min-height: 1.25rem; }
-        .forecast-next-error { color: #fca5a5; margin: 0; }
 
         .filters-primary-row {
           display: flex;
@@ -199,23 +203,24 @@ export function App() {
           gap: 0.5rem 0.75rem;
           margin-top: 0.75rem;
           padding: 0.5rem 0;
-          border-top: 1px solid rgba(255,255,255,0.08);
+          border-top: 1px solid var(--fu-border);
         }
-        .quick-filters-label { font-size: 0.8rem; margin-right: 0.25rem; }
+        .quick-filters-label { font-size: 0.8rem; margin-right: 0.25rem; color: var(--fu-muted); }
         .quick-filters-buttons { display: flex; flex-wrap: wrap; gap: 0.35rem; }
         .quick-filter-btn {
           font-size: 0.8rem;
           padding: 0.25rem 0.55rem;
-          border-radius: 4px;
-          border: 1px solid rgba(255,255,255,0.15);
-          background: rgba(0,0,0,0.2);
-          color: inherit;
+          border-radius: 8px;
+          border: 1px solid var(--fu-border-strong);
+          background: var(--fu-panel);
+          color: var(--fu-text);
           cursor: pointer;
         }
-        .quick-filter-btn:hover { border-color: rgba(255,255,255,0.35); }
+        .quick-filter-btn:hover { border-color: var(--fu-brand); background: var(--fu-brand-soft); }
         .quick-filter-btn.is-active {
-          border-color: rgba(96, 165, 250, 0.7);
-          background: rgba(59, 130, 246, 0.15);
+          border-color: var(--fu-brand);
+          background: var(--fu-brand-soft);
+          color: var(--fu-brand-on-soft);
         }
 
         .filters-secondary-row {
@@ -224,7 +229,7 @@ export function App() {
           gap: 0.75rem 1rem;
           margin-top: 0.5rem;
           padding-top: 0.5rem;
-          border-top: 1px solid rgba(255,255,255,0.06);
+          border-top: 1px solid var(--fu-border);
         }
         .filters-secondary-row label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; }
 
@@ -232,7 +237,7 @@ export function App() {
         .calc-params-summary {
           cursor: pointer;
           font-size: 0.85rem;
-          color: rgba(255,255,255,0.65);
+          color: var(--fu-muted);
           padding: 0.35rem 0;
         }
         .calc-params-body { padding-top: 0.5rem; }
@@ -250,47 +255,50 @@ export function App() {
           text-transform: uppercase;
           letter-spacing: 0.04em;
           margin: 0.25rem 0 0 0;
+          color: var(--fu-muted);
         }
-        .summary-grid-technical .cell { opacity: 0.85; }
+        .summary-grid-technical .cell { opacity: 0.92; }
         .summary-grid-technical .cell strong { font-weight: 500; font-size: 0.95em; }
-        .cell-muted .muted { opacity: 0.75; }
+        .cell-muted .muted { opacity: 0.85; }
 
         .detail-diagnosis {
           padding: 0.65rem 0.85rem;
-          border-radius: 6px;
+          border-radius: 8px;
           margin-bottom: 0.65rem;
-          border: 1px solid rgba(255,255,255,0.1);
-          background: rgba(0,0,0,0.15);
+          border: 1px solid var(--fu-border);
+          background: var(--fu-bg);
         }
-        .detail-diagnosis-ok { border-color: rgba(34, 197, 94, 0.35); }
-        .detail-diagnosis-need_wb { border-color: rgba(59, 130, 246, 0.45); }
-        .detail-diagnosis-stockout_before_arrival { border-color: rgba(248, 113, 113, 0.45); }
-        .detail-diagnosis-regional_deficit { border-color: rgba(250, 204, 21, 0.4); }
-        .detail-diagnosis-title { font-weight: 600; margin: 0 0 0.25rem 0; font-size: 1rem; }
-        .detail-diagnosis-hint { margin: 0; font-size: 0.85rem; line-height: 1.35; }
+        .detail-diagnosis-ok { border-color: rgba(5, 150, 105, 0.35); background: var(--fu-ok-soft); }
+        .detail-diagnosis-need_wb { border-color: rgba(13, 148, 136, 0.35); background: var(--fu-brand-soft); }
+        .detail-diagnosis-stockout_before_arrival { border-color: rgba(220, 38, 38, 0.35); background: var(--fu-danger-soft); }
+        .detail-diagnosis-regional_deficit { border-color: rgba(217, 119, 6, 0.35); background: var(--fu-warn-soft); }
+        .detail-diagnosis-title { font-weight: 600; margin: 0 0 0.25rem 0; font-size: 1rem; color: var(--fu-text); }
+        .detail-diagnosis-hint { margin: 0; font-size: 0.85rem; line-height: 1.35; color: var(--fu-muted); }
         .detail-action-line {
           font-size: 0.9rem;
           margin: 0 0 0.75rem 0;
           padding: 0.35rem 0;
-          border-bottom: 1px solid rgba(255,255,255,0.08);
+          border-bottom: 1px solid var(--fu-border);
+          color: var(--fu-text);
         }
         .detail-section-heading {
           font-size: 0.8rem;
           text-transform: uppercase;
           letter-spacing: 0.05em;
           margin: 0.75rem 0 0.35rem 0;
-          color: rgba(255,255,255,0.55);
+          color: var(--fu-muted);
         }
 
         .table-empty-state {
           padding: 1.5rem 1rem;
-          border: 1px dashed rgba(255,255,255,0.15);
+          border: 1px dashed var(--fu-border-strong);
           border-radius: 8px;
           text-align: center;
           max-width: 36rem;
           margin: 0.5rem auto 0 auto;
+          background: var(--fu-bg);
         }
-        .table-empty-title { font-weight: 600; margin: 0 0 0.5rem 0; }
+        .table-empty-title { font-weight: 600; margin: 0 0 0.5rem 0; color: var(--fu-text); }
         .table-empty-hint { margin: 0; font-size: 0.9rem; line-height: 1.45; }
 
         .supplier-table-toolbar {
@@ -302,7 +310,7 @@ export function App() {
           font-size: 0.85rem;
         }
         .supplier-toolbar-toggle { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; }
-        .supplier-toolbar-hint { font-size: 0.75rem; margin-left: auto; }
+        .supplier-toolbar-hint { font-size: 0.75rem; margin-left: auto; color: var(--fu-muted); }
       `}</style>
     </div>
   );

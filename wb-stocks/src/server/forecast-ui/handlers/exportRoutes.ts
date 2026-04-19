@@ -20,7 +20,7 @@ import type { ForecastUiHandlerDeps } from "../types.js";
 import type { ForecastRouteMatch } from "../routes/routeTypes.js";
 
 export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMatch[] {
-  const { forecastRepo } = deps;
+  const { forecastReportQuery } = deps;
 
   return [
     {
@@ -50,7 +50,7 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
           q.viewMode === "wbWarehouses"
             ? toCsv(
                 wbReportRowsToCsvObjects(
-                  forecastRepo.listReportRows(
+                  forecastReportQuery.listReportRows(
                     q.snapshotDate,
                     q.horizonDays,
                     filter,
@@ -62,7 +62,7 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
             : q.viewMode === "systemTotal"
               ? toCsv(
                   systemTotalRowsToCsvObjects(
-                    forecastRepo.listSystemTotalBySkuReportRows(
+                    forecastReportQuery.listSystemTotalBySkuReportRows(
                       q.snapshotDate,
                       q.horizonDays,
                       filter,
@@ -73,7 +73,7 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
                 )
               : toCsv(
                   wbTotalRowsToCsvObjects(
-                    forecastRepo.listWbTotalBySkuReportRows(
+                    forecastReportQuery.listWbTotalBySkuReportRows(
                       q.snapshotDate,
                       q.horizonDays,
                       filter,
@@ -119,7 +119,7 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
           supplierSafetyDays: q.supplierSafetyDays,
           viewMode: q.viewMode,
         };
-        const supplierRows = forecastRepo.listSupplierReplenishmentBySku(
+        const supplierRows = forecastReportQuery.listSupplierReplenishmentBySku(
           q.snapshotDate,
           q.horizonDays,
           supplierFilter,

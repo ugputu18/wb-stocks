@@ -6,7 +6,9 @@ import {
   WAREHOUSE_REGION_AUDIT_ROUTE,
 } from "./routes.js";
 import "./forecast-ui-theme.css";
+import "./panda.css";
 import "./components/hints/hints.css";
+import "./pages/forecast-page.css";
 import { App } from "./App.js";
 import { RedistributionPage } from "./pages/RedistributionPage.js";
 import { RegionalDemandDiagnosticsPage } from "./pages/RegionalDemandDiagnosticsPage.js";

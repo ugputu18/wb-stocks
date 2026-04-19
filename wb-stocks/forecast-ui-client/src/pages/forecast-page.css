@@ -1,0 +1,169 @@
+/**
+ * Main forecast page layout + shared “forecast table” class names used by
+ * FiltersForm, SummaryGrid, DetailPanel, MainTable, SupplierTable.
+ *
+ * Imported from `main.tsx` (not `App.tsx`) so `.forecast-next-root` and base
+ * layout apply on all SPA routes that reuse that shell (`/redistribution`, etc.).
+ */
+
+/* --- Page layout & status ---------------------------------------------- */
+
+.forecast-next-root {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 1.25rem 3rem;
+}
+
+#status {
+  min-height: 1.25rem;
+}
+
+/*
+ * FiltersForm layout + chips + calc-params block: Panda recipes
+ * (`filterFormRow`, `filterField`, `quickFilters*`, `quickFilterChip`, `calcParams*`).
+ */
+
+/* Theme `.controls label` uses gap 0.25rem; recipe `filterField` targets 0.32rem — win cascade. */
+.controls label.fu-filter-field {
+  gap: 0.32rem;
+}
+
+/* Только форма фильтров: компактнее «Загрузить», остальные `btn-load` — тема. */
+.filter-load-wrap .btn-load {
+  align-self: flex-end;
+  padding: 0.28rem 0.65rem;
+  border-radius: 6px;
+}
+
+@media (max-width: 720px) {
+  .fu-filter-form-row {
+    gap: 0.55rem 0.75rem;
+  }
+  .fu-filter-search-action {
+    flex-basis: 100%;
+  }
+}
+
+/* --- Summary KPI grid (overrides tighter columns vs theme .summary-grid) */
+
+.summary-grid-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.5rem 0.75rem;
+}
+
+.summary-grid-tech-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0.25rem 0 0 0;
+  color: var(--fu-muted);
+}
+
+.summary-grid-technical .cell {
+  opacity: 0.92;
+}
+
+.summary-grid-technical .cell strong {
+  font-weight: 500;
+  font-size: 0.95em;
+}
+
+.cell-muted .muted {
+  opacity: 0.85;
+}
+
+/* --- Detail panel: diagnosis + headings ------------------------------ */
+
+.detail-diagnosis {
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  margin-bottom: 0.65rem;
+  border: 1px solid var(--fu-border);
+  background: var(--fu-bg);
+}
+
+.detail-diagnosis-ok {
+  border-color: rgba(5, 150, 105, 0.35);
+  background: var(--fu-ok-soft);
+}
+
+.detail-diagnosis-need_wb {
+  border-color: rgba(13, 148, 136, 0.35);
+  background: var(--fu-brand-soft);
+}
+
+.detail-diagnosis-stockout_before_arrival {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: var(--fu-danger-soft);
+}
+
+.detail-diagnosis-regional_deficit {
+  border-color: rgba(217, 119, 6, 0.35);
+  background: var(--fu-warn-soft);
+}
+
+.detail-diagnosis-title {
+  font-weight: 600;
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+  color: var(--fu-text);
+}
+
+.detail-diagnosis-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: var(--fu-muted);
+}
+
+.detail-action-line {
+  font-size: 0.9rem;
+  margin: 0 0 0.75rem 0;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--fu-border);
+  color: var(--fu-text);
+}
+
+.detail-section-heading {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0.75rem 0 0.35rem 0;
+  color: var(--fu-muted);
+}
+
+/* --- Table empty state (typography; shell via Panda `tableEmptyState`) */
+
+.table-empty-title {
+  font-weight: 600;
+  margin: 0 0 0.5rem 0;
+  color: var(--fu-text);
+}
+
+.table-empty-hint {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+/* --- Supplier table toolbar (toolbar flex via Panda `toolbarRow`) ----- */
+
+.supplier-toolbar-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+.supplier-toolbar-hint {
+  font-size: 0.75rem;
+  margin-left: auto;
+  color: var(--fu-muted);
+}

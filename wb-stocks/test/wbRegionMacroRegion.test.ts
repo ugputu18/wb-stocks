@@ -32,10 +32,10 @@ describe("wbRegionMacroRegion bootstrap", () => {
     }
   });
 
-  it("maps CIS buyer regions to СНГ cluster and RF extras", () => {
+  it("maps CIS buyer regions to country labels aligned with warehouse macro regions", () => {
     const lookup = buildRegionMacroLookup([]);
-    expect(getMacroRegionByRegionKey("минск", lookup)).toBe("СНГ");
-    expect(getMacroRegionByRegionKey("алматы", lookup)).toBe("СНГ");
+    expect(getMacroRegionByRegionKey("минск", lookup)).toBe("Беларусь");
+    expect(getMacroRegionByRegionKey("алматы", lookup)).toBe("Казахстан");
     expect(getMacroRegionByRegionKey("ханты-мансийский автономный округ", lookup)).toBe("Уральский");
     expect(getMacroRegionByRegionKey("федеральная территория сириус", lookup)).toBe(
       "Южный и Северо-Кавказский",

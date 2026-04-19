@@ -8,6 +8,14 @@ const wbStocksRoot = resolve(__dirname, "..");
 
 export default defineConfig({
   plugins: [preact()],
+  resolve: {
+    alias: {
+      /** Radix (`@radix-ui/*`) импортирует `react` / `react-dom`; для Preact — compat. */
+      react: resolve(wbStocksRoot, "node_modules/preact/compat"),
+      "react-dom": resolve(wbStocksRoot, "node_modules/preact/compat"),
+      "react/jsx-runtime": resolve(wbStocksRoot, "node_modules/preact/jsx-runtime"),
+    },
+  },
   root: __dirname,
   base: "/next/",
   build: {

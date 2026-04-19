@@ -6,6 +6,7 @@ import {
   formatWarehouseRegionFirst,
 } from "../../utils/wbWarehouseRegion.js";
 import { WB_WAREHOUSE_STATS_BUTTON_TITLE } from "./redistributionConstants.js";
+import { Panel } from "../../components/ui/Panel.js";
 import type { WarehouseOptionStats } from "./redistributionTypes.js";
 
 export type RedistributionControlsSectionProps = {
@@ -60,7 +61,7 @@ export function RedistributionControlsSection(props: RedistributionControlsSecti
   } = props;
 
   return (
-    <section class="panel redistribution-controls">
+    <Panel class="redistribution-controls">
       <h2>Параметры</h2>
       <div class="redistribution-controls-grid">
         <label>
@@ -197,7 +198,7 @@ export function RedistributionControlsSection(props: RedistributionControlsSecti
           </select>
           <span
             class="muted redistribution-field-hint"
-            title="Regional: нехватка = ceil(целевой запас − Σ local в регионе); перевод = min(можно забрать, нехватка); без строк «донор и цель в одном макрорегионе». Fulfillment: цель = склад."
+            title="Regional: нехватка = ceil(целевой запас − Σ local в регионе); перевод = min(можно забрать, нехватка); без строк «донор и цель в одном регионе». Fulfillment: цель = склад."
           >
             Подсказка
           </span>
@@ -240,6 +241,6 @@ export function RedistributionControlsSection(props: RedistributionControlsSecti
           «Подобрать перемещения» не блокируем.
         </p>
       ) : null}
-    </section>
+    </Panel>
   );
 }

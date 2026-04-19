@@ -50,7 +50,7 @@ export function WarehouseRegionAuditPage(): JSX.Element {
   return (
     <div class="forecast-next-root warehouse-audit-page">
       <header class="top">
-        <h1>Аудит маппинга складов → макрорегион</h1>
+        <h1>Аудит маппинга складов → регион</h1>
         <p class="muted">
           <a href={FORECAST_UI_SPA_ROUTES.home}>← К прогнозу</a>
           {" · "}
@@ -155,9 +155,9 @@ export function WarehouseRegionAuditPage(): JSX.Element {
 
       {data?.clusterTotals?.length ? (
         <section class="panel warehouse-audit-clusters">
-          <h2>Кластеры (по макрорегиону)</h2>
+          <h2>Кластеры (по региону)</h2>
           <p class="muted">
-            Сибирь / ДВ / Новосибирск-хаб объединены в одну группу; внутри макрорегионы не дублируются.
+            Сибирь / ДВ / Новосибирск-хаб объединены в одну группу; внутри регионы не дублируются.
           </p>
           <div class="table-wrap">
             <table class="warehouse-audit-table">
@@ -188,12 +188,12 @@ export function WarehouseRegionAuditPage(): JSX.Element {
 
       {data?.macroRegionTotals?.length ? (
         <section class="panel warehouse-audit-macro">
-          <h2>По макрорегиону (только сопоставленные склады)</h2>
+          <h2>По региону (только сопоставленные склады)</h2>
           <div class="table-wrap">
             <table class="warehouse-audit-table">
               <thead>
                 <tr>
-                  <th>Макрорегион</th>
+                  <th>Регион</th>
                   <th>Складов</th>
                   <th>Строк</th>
                   <th>Σ спрос/день</th>
@@ -249,7 +249,7 @@ export function WarehouseRegionAuditPage(): JSX.Element {
       ) : null}
 
       {data && data.unmappedSortedByForecast.length === 0 ? (
-        <p class="muted">Все склады среза сопоставлены с макрорегионом.</p>
+        <p class="muted">Все склады среза сопоставлены с регионом.</p>
       ) : null}
 
       <style>{`

@@ -69,7 +69,7 @@ export function RegionalDemandDiagnosticsPage(): JSX.Element {
           Сравнение агрегатов без фильтра по SKU:{" "}
           <strong>регион заказа</strong> (снимок <code>wb_region_demand_snapshots</code>, география покупателя) и{" "}
           <strong>спрос по складу исполнения</strong> (снимок <code>wb_forecast_snapshots</code> по складам, тот же{" "}
-          <code>horizonDays</code>, что в форме). Макрорегион для регионов — таблица{" "}
+          <code>horizonDays</code>, что в форме). Регион для buyer-регионов — таблица{" "}
           <code>wb_region_macro_region</code> + bootstrap в <code>wbRegionKeyMacroRegionBootstrap.ts</code> (БД
           перекрывает код); для складов —{" "}
           <code>wbWarehouseMacroRegion.ts</code>. Pipeline прогноза не меняется.
@@ -146,7 +146,7 @@ export function RegionalDemandDiagnosticsPage(): JSX.Element {
               <dd>{formatNum(t.fulfillmentTotalDemand)}</dd>
             </div>
             <div>
-              <dt>С mapped макрорегионом (доля от Σ regional)</dt>
+              <dt>С сопоставленным регионом (доля от Σ regional)</dt>
               <dd>
                 {formatNum(t.regionalMappedDemand)} ({pct(t.regionalMappedShareOfRegional)})
               </dd>
@@ -160,7 +160,7 @@ export function RegionalDemandDiagnosticsPage(): JSX.Element {
           </dl>
           {data.unmappedRegionalTotals.length === 0 ? (
             <p class="muted regional-diagnostics-unmapped-ok">
-              Все <code>region_key</code> в срезе сопоставлены с макрорегионом (in-code + БД).
+              Все <code>region_key</code> в срезе сопоставлены с регионом (in-code + БД).
             </p>
           ) : t.regionalUnmappedShareOfRegional <= 0.05 ? (
             <p class="muted regional-diagnostics-unmapped-ok">
@@ -202,12 +202,12 @@ export function RegionalDemandDiagnosticsPage(): JSX.Element {
 
       {data?.warehouseMacroRegionTotals?.length ? (
         <section class="panel regional-diagnostics-block">
-          <h2>Fulfillment по макрорегиону склада</h2>
+          <h2>Fulfillment по региону склада</h2>
           <div class="table-wrap">
             <table class="regional-diagnostics-table">
               <thead>
                 <tr>
-                  <th>Макрорегион</th>
+                  <th>Регион</th>
                   <th>Спрос/день (Σ по складам)</th>
                   <th>Доля от Σ fulfillment</th>
                 </tr>
@@ -228,7 +228,7 @@ export function RegionalDemandDiagnosticsPage(): JSX.Element {
 
       {data?.comparisonByMacroRegion?.length ? (
         <section class="panel regional-diagnostics-block">
-          <h2>Сравнение по макрорегиону</h2>
+          <h2>Сравнение по региону</h2>
           <p class="muted">
             Сортировка: по убыванию <code>|gapShare|</code> — сначала самые «сдвинутые» кластеры.
           </p>
@@ -236,7 +236,7 @@ export function RegionalDemandDiagnosticsPage(): JSX.Element {
             <table class="regional-diagnostics-table">
               <thead>
                 <tr>
-                  <th>Макрорегион</th>
+                  <th>Регион</th>
                   <th>Regional</th>
                   <th>Fulfillment</th>
                   <th>Доля regional</th>

@@ -17,6 +17,9 @@ For the full design notes (architecture, idempotency models, snapshot model,
 own-warehouse import semantics, migration plan) see [`ReadmeAI.md`](./ReadmeAI.md).
 For a focused WB-API reference (endpoints, fields, rate limits, deprecations,
 gotchas) see [`docs/wb-api.md`](./docs/wb-api.md).
+For **WB redistribution** in forecast UI (macro vs warehouse execution, registry,
+compatibility rules): [`docs/redistribution-product.md`](./docs/redistribution-product.md)
+and [`docs/redistribution-read-model.md`](./docs/redistribution-read-model.md).
 
 ## Requirements
 
@@ -138,6 +141,8 @@ scripts/
   update-wb-supplies.ts              # WB supplies manual entry point
 docs/
   wb-api.md                          # focused WB API reference (used endpoints)
+  redistribution-product.md          # redistribution: macro vs execution, compatibility
+  redistribution-read-model.md       # redistribution: client pools, flags, ranking
 test/
   *.test.ts
 ```

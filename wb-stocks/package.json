@@ -13,8 +13,11 @@
     "update:wb-supplies": "node --env-file=.env --import tsx scripts/update-wb-supplies.ts",
     "forecast:sales-mvp": "node --env-file=.env --import tsx scripts/run-sales-forecast-mvp.ts",
     "serve:forecast-ui": "node --env-file=.env --import tsx scripts/serve-forecast-ui.ts",
-    "dev:forecast-ui-client": "vite --config forecast-ui-client/vite.config.ts",
-    "build:forecast-ui-client": "vite build --config forecast-ui-client/vite.config.ts",
+    "report:warehouse-macro-coverage": "node --env-file=.env --import tsx scripts/report-warehouse-macro-coverage.ts",
+    "panda:forecast-ui": "panda codegen --cwd forecast-ui-client && panda cssgen --cwd forecast-ui-client",
+    "prepare": "pnpm run panda:forecast-ui",
+    "dev:forecast-ui-client": "pnpm run panda:forecast-ui && vite --config forecast-ui-client/vite.config.ts",
+    "build:forecast-ui-client": "pnpm run panda:forecast-ui && vite build --config forecast-ui-client/vite.config.ts",
     "typecheck:forecast-ui-client": "tsc --project forecast-ui-client/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -22,12 +25,14 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
+    "@radix-ui/react-popover": "^1.1.15",
     "better-sqlite3": "^12.9.0",
     "csv-parse": "^6.2.1",
     "pino": "^10.3.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@pandacss/dev": "^1.10.0",
     "@preact/preset-vite": "^2.10.2",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.6.0",

@@ -1,5 +1,6 @@
 import type { ForecastViewMode } from "../api/types.js";
 import type { ExplainFocus } from "../types/explain.js";
+import { tableEmptyState } from "../../styled-system/recipes";
 import { TableHeadHintCell } from "./hints/index.js";
 import {
   badgeClass,
@@ -130,7 +131,7 @@ function TheadWarehouses() {
       <tr class="thead-hint-row">
         <TableHeadHintCell></TableHeadHintCell>
         <TableHeadHintCell>S / W / L</TableHeadHintCell>
-        <TableHeadHintCell>макрорегион из справочника</TableHeadHintCell>
+        <TableHeadHintCell>регион из справочника</TableHeadHintCell>
         <TableHeadHintCell></TableHeadHintCell>
         <TableHeadHintCell></TableHeadHintCell>
         <TableHeadHintCell></TableHeadHintCell>
@@ -541,7 +542,7 @@ export function MainTable({
 
   if (rows.length === 0) {
     return (
-      <div class="main-table-empty table-empty-state">
+      <div class={`main-table-empty ${tableEmptyState()}`}>
         <p class="table-empty-title">Нет строк по текущим фильтрам</p>
         <p class="muted table-empty-hint">
           Смягчите «Риск окончания», увеличьте лимит или сбросьте поиск / быстрый фокус. Если данные

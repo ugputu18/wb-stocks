@@ -3,6 +3,8 @@ import {
   getWarehouseMacroRegion,
   formatWarehouseWithRegion,
   formatWarehouseRegionFirst,
+  isWarehouseMacroCompatibleWithTargetMacro,
+  shouldSkipRedistributionDonorVsTargetMacro,
   UNMAPPED_WAREHOUSE_REGION_LABEL,
   WB_WAREHOUSE_MACRO_REGION,
 } from "../forecast-ui-client/src/utils/wbWarehouseRegion.js";
@@ -53,5 +55,62 @@ describe("справочник", () => {
   it("содержит ожидаемые ключи", () => {
     expect(WB_WAREHOUSE_MACRO_REGION["новосибирск"]).toBe("Сибирский и Дальневосточный");
     expect(WB_WAREHOUSE_MACRO_REGION["казань"]).toBe("Приволжский");
+  });
+});
+
+describe("isWarehouseMacroCompatibleWithTargetMacro", () => {
+  it("совпадение строки", () => {
+    expect(isWarehouseMacroCompatibleWithTargetMacro("Сибирский", "Сибирский")).toBe(true);
+  });
+
+  it("Сибирский ↔ Сибирский и Дальневосточный (кластер)", () => {
+    expect(
+      isWarehouseMacroCompatibleWithTargetMacro(
+        "Сибирский и Дальневосточный",
+        "Сибирский",
+      ),
+    ).toBe(true);
+    expect(
+      isWarehouseMacroCompatibleWithTargetMacro("Сибирский", "Сибирский и Дальневосточный"),
+    ).toBe(true);
+  });
+
+  it("Дальневосточный в том же кластере", () => {
+    expect(
+      isWarehouseMacroCompatibleWithTargetMacro("Сибирский и Дальневосточный", "Дальневосточный"),
+    ).toBe(true);
+  });
+
+  it("разные кластеры — false", () => {
+    expect(isWarehouseMacroCompatibleWithTargetMacro("Приволжский", "Сибирский")).toBe(false);
+  });
+
+  it("не сопоставлен — false", () => {
+    expect(
+      isWarehouseMacroCompatibleWithTargetMacro(UNMAPPED_WAREHOUSE_REGION_LABEL, "Сибирский"),
+    ).toBe(false);
+  });
+
+  it("страны СНГ не совместимы между собой (только сам с собой)", () => {
+    expect(isWarehouseMacroCompatibleWithTargetMacro("Казахстан", "Беларусь")).toBe(false);
+    expect(isWarehouseMacroCompatibleWithTargetMacro("Беларусь", "Казахстан")).toBe(false);
+    expect(isWarehouseMacroCompatibleWithTargetMacro("Армения", "Узбекистан")).toBe(false);
+    expect(isWarehouseMacroCompatibleWithTargetMacro("Киргизия", "Казахстан")).toBe(false);
+    expect(isWarehouseMacroCompatibleWithTargetMacro("Узбекистан", "Таджикистан")).toBe(false);
+    expect(isWarehouseMacroCompatibleWithTargetMacro("Таджикистан", "Армения")).toBe(false);
+  });
+
+  it("страна СНГ совместима сама с собой", () => {
+    expect(isWarehouseMacroCompatibleWithTargetMacro("Казахстан", "Казахстан")).toBe(true);
+    expect(isWarehouseMacroCompatibleWithTargetMacro("Таджикистан", "Таджикистан")).toBe(true);
+  });
+});
+
+describe("shouldSkipRedistributionDonorVsTargetMacro", () => {
+  it("пропуск только при строгом совпадении макрорегионов", () => {
+    expect(shouldSkipRedistributionDonorVsTargetMacro("Приволжский", "Приволжский")).toBe(true);
+    expect(shouldSkipRedistributionDonorVsTargetMacro("Сибирский и Дальневосточный", "Сибирский")).toBe(
+      false,
+    );
   });
 });

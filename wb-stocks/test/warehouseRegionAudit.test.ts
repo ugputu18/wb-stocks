@@ -46,4 +46,30 @@ describe("wbWarehouseMacroRegion new keys", () => {
     expect(getWarehouseMacroRegion("самара (новосемейкино)")).toBe("Приволжский");
     expect(getWarehouseMacroRegion("екатеринбург - перспективная 14")).toBe("Уральский");
   });
+
+  it("maps WB target / UI warehouse keys added for coverage", () => {
+    expect(getWarehouseMacroRegion("санкт-петербург уткина заводь")).toBe("Северо-Западный");
+    expect(getWarehouseMacroRegion("сц шушары")).toBe("Северо-Западный");
+    expect(getWarehouseMacroRegion("екатеринбург - испытателей 14г")).toBe("Уральский");
+    expect(getWarehouseMacroRegion("виртуальный челябинск")).toBe("Уральский");
+    expect(getWarehouseMacroRegion("новосемейкино")).toBe("Приволжский");
+    expect(getWarehouseMacroRegion("сарапул")).toBe("Приволжский");
+    expect(getWarehouseMacroRegion("виртуальный уфа")).toBe("Приволжский");
+    expect(getWarehouseMacroRegion("воронеж")).toBe("Центральный");
+    expect(getWarehouseMacroRegion("истра")).toBe("Центральный");
+    expect(getWarehouseMacroRegion("виртуальный владикавказ")).toBe("Южный и Северо-Кавказский");
+    expect(getWarehouseMacroRegion("виртуальный краснодар")).toBe("Южный и Северо-Кавказский");
+    expect(getWarehouseMacroRegion("виртуальный крым")).toBe("Южный и Северо-Кавказский");
+    expect(getWarehouseMacroRegion("виртуальный махачкала")).toBe("Южный и Северо-Кавказский");
+    expect(getWarehouseMacroRegion("актобе")).toBe("Казахстан");
+    expect(getWarehouseMacroRegion("астана карагандинское шоссе")).toBe("Казахстан");
+    expect(getWarehouseMacroRegion("атакент")).toBe("Казахстан");
+    expect(getWarehouseMacroRegion("ск ереван")).toBe("Армения");
+    expect(getWarehouseMacroRegion("ташкент 2")).toBe("Узбекистан");
+  });
+
+  it("normalizes case like other keys", () => {
+    expect(getWarehouseMacroRegion("СК Ереван")).toBe("Армения");
+    expect(getWarehouseMacroRegion("Атакент")).toBe("Казахстан");
+  });
 });

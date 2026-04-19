@@ -26,6 +26,11 @@ describe("parseWbWarehouseRow", () => {
     expect(p?.recommendedToWB).toBe(0);
   });
 
+  it("нормализует warehouseKey через normalizeWarehouseName", () => {
+    const p = parseWbWarehouseRow(wh("\u00a0\u041a\u0410\u0417\u0410\u041d\u042c  ", 100, 5, 20, 0));
+    expect(p?.warehouseKey).toBe("казань");
+  });
+
   it("returns null without warehouseKey", () => {
     expect(parseWbWarehouseRow({})).toBeNull();
   });

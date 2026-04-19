@@ -1,0 +1,6 @@
+/**
+ * Full stylesheet from `panda cssgen` (recipes, tokens, layers).
+ * A standalone `@layer` prelude is not enough — without this import, `fu-*`
+ * recipe classes in the DOM have no matching rules (only atomic scans inject otherwise).
+ */
+@import "../styled-system/styles.css";

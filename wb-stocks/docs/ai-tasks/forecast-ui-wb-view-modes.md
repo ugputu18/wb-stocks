@@ -2,8 +2,8 @@
 
 ## Что сделано
 
-- Read-side представление **WB в целом по SKU** (`wbTotal`, default): агрегация в `WbForecastSnapshotRepository.buildWbTotalBySkuReportRowsFull` — `SUM(forecast_daily_demand)`, `SUM(start_stock + incoming_units)`, `MIN(stockout_date)`, `MIN(stock_snapshot_at)`, риск по `daysOfStockWB` из `daysOfStockWbFromNetworkTotals` в `multiLevelInventory.ts`.
-- Режим **по складам** (`wbWarehouses`): прежние строки `listReportRows`.
+- Read-side представление **WB в целом по SKU** (`wbTotal`, default): агрегация в `WbForecastReportQueryService` (внутри `buildWbTotalBySkuReportRowsFull`) — `SUM(forecast_daily_demand)`, `SUM(start_stock + incoming_units)`, `MIN(stockout_date)`, `MIN(stock_snapshot_at)`, риск по `daysOfStockWB` из `daysOfStockWbFromNetworkTotals` в `multiLevelInventory.ts`.
+- Режим **по складам** (`wbWarehouses`): прежние строки `listReportRows` на том же query-сервисе.
 - **`GET /api/forecast/rows`**, **`summary`**, **`export-wb`**: параметр `viewMode`, ответы с echo `viewMode`.
 - UI: селектор «WB в целом» / «По складам WB», таблица и KPI синхронизированы с режимом; supplier-блок без изменения смысла.
 

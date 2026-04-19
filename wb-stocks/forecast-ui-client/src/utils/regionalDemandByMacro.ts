@@ -11,7 +11,7 @@ export interface RegionalDemandSnapshotRow {
 }
 
 /**
- * Агрегирует снимок спроса по регионам заказа в Σ по макрорегиону (buyer region → macro).
+ * Агрегирует снимок спроса по регионам заказа в Σ по региону-кластеру (buyer region → macro).
  * Ключ верхнего уровня: `nmId|techSize`.
  */
 export function buildRegionalDemandByMacroBySku(

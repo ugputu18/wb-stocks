@@ -142,6 +142,7 @@ export function buildWarehouseRegionAudit(
     }))
     .sort((a, b) => b.sumForecastDailyDemand - a.sumForecastDailyDemand);
 
+  /** Кластеры в т.ч. `cis` — только для аудита/сводок; redistribution использует отдельные группы совместимости. */
   const clusterTotals: ClusterTotals[] = WB_MACRO_REGION_CLUSTERS.map((c) => {
     let warehouseCount = 0;
     let rc = 0;

@@ -9,7 +9,7 @@ import type { ForecastUiHandlerDeps } from "../types.js";
 import type { ForecastRouteMatch } from "../routes/routeTypes.js";
 
 export function createForecastReadRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMatch[] {
-  const { forecastRepo } = deps;
+  const { forecastRepo, forecastReportQuery } = deps;
 
   return [
     {
@@ -55,20 +55,20 @@ export function createForecastReadRoutes(deps: ForecastUiHandlerDeps): ForecastR
         };
         const rows =
           q.viewMode === "wbWarehouses"
-            ? forecastRepo.listReportRows(
+            ? forecastReportQuery.listReportRows(
                 q.snapshotDate,
                 q.horizonDays,
                 filter,
                 limit,
               )
             : q.viewMode === "systemTotal"
-              ? forecastRepo.listSystemTotalBySkuReportRows(
+              ? forecastReportQuery.listSystemTotalBySkuReportRows(
                   q.snapshotDate,
                   q.horizonDays,
                   filter,
                   limit,
                 )
-              : forecastRepo.listWbTotalBySkuReportRows(
+              : forecastReportQuery.listWbTotalBySkuReportRows(
                   q.snapshotDate,
                   q.horizonDays,
                   filter,
@@ -111,7 +111,7 @@ export function createForecastReadRoutes(deps: ForecastUiHandlerDeps): ForecastR
           viewMode: q.viewMode,
           systemTotalQuickFilter: q.systemTotalQuickFilter,
         };
-        const agg = forecastRepo.aggregateReportMetrics(
+        const agg = forecastReportQuery.aggregateReportMetrics(
           q.snapshotDate,
           q.horizonDays,
           filter,
@@ -167,7 +167,7 @@ export function createForecastReadRoutes(deps: ForecastUiHandlerDeps): ForecastR
           supplierSafetyDays: q.supplierSafetyDays,
           viewMode: q.viewMode,
         };
-        const supplierRows = forecastRepo.listSupplierReplenishmentBySku(
+        const supplierRows = forecastReportQuery.listSupplierReplenishmentBySku(
           q.snapshotDate,
           q.horizonDays,
           supplierFilter,

@@ -4,12 +4,15 @@ import { WbDemandSnapshotRepository } from "../../infra/wbDemandSnapshotReposito
 import { WbRegionDemandSnapshotRepository } from "../../infra/wbRegionDemandSnapshotRepository.js";
 import { StockSnapshotRepository } from "../../infra/stockSnapshotRepository.js";
 import { WbSupplyRepository } from "../../infra/wbSupplyRepository.js";
-import { WbForecastSnapshotRepository } from "../../infra/wbForecastSnapshotRepository.js";
+import {
+  WbForecastReportQueryService,
+  WbForecastSnapshotRepository,
+} from "../../infra/wbForecastSnapshotRepository.js";
 import type { ForecastUiServerCtx } from "./forecastUiServerCtx.js";
-import type { ForecastUiHandlerDeps } from "./types.js";
+import type { ForecastMvpDeps, ForecastUiHandlerDeps } from "./types.js";
 
 /** Dependencies for `runSalesForecastMvp` (recalculate). */
-export function buildMvpDeps(ctx: ForecastUiServerCtx) {
+export function buildMvpDeps(ctx: ForecastUiServerCtx): ForecastMvpDeps {
   const { db, wbClient, logger } = ctx;
   return {
     db,
@@ -27,8 +30,10 @@ export function buildMvpDeps(ctx: ForecastUiServerCtx) {
 
 /** Single place to attach `forecastRepo` for API handlers (one instance per request, as before). */
 export function buildForecastUiHandlerDeps(ctx: ForecastUiServerCtx): ForecastUiHandlerDeps {
+  const forecastRepo = new WbForecastSnapshotRepository(ctx.db);
   return {
     ...ctx,
-    forecastRepo: new WbForecastSnapshotRepository(ctx.db),
+    forecastRepo,
+    forecastReportQuery: new WbForecastReportQueryService(ctx.db, forecastRepo),
   };
 }

@@ -62,7 +62,7 @@ export function RedistributionSkuNetworkSection(
         {skuNetworkSelection.targetMacroRegion ? (
           <>
             <span class="redistribution-badge redistribution-badge-macro">Регион назначения</span> —
-            склады в макрорегионе из строки рекомендации;{" "}
+            склады в регионе из строки рекомендации;{" "}
             <span class="redistribution-badge redistribution-badge-target">Прим. склад</span> — склад с max
             «На WB» среди кандидатов в регионе (если есть).
           </>

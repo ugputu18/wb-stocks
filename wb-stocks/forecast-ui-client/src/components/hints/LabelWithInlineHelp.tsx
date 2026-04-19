@@ -1,7 +1,11 @@
 import type { ComponentChildren } from "preact";
 import type { JSX } from "preact";
+import { fieldLabelRow } from "../../../styled-system/recipes";
 
-/** Wraps a field label plus inline help control (e.g. HelpToggle). */
+/**
+ * Строка подписи поля: текст + компактный help (`HelpToggle`).
+ * См. recipes `fieldLabelRow` + `helpTrigger` / `helpPopover` в Panda.
+ */
 export function LabelWithInlineHelp({ children }: { children: ComponentChildren }): JSX.Element {
-  return <span class="label-with-help">{children}</span>;
+  return <span class={fieldLabelRow()}>{children}</span>;
 }

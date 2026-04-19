@@ -25,7 +25,7 @@ export type SkuNetworkSelection = {
   vendorCode: string;
   /** Fulfillment: целевой склад; Regional: предпочтительный склад в регионе (если есть). */
   targetWarehouseKey: string;
-  /** Regional: макрорегион назначения (buyer-region demand); иначе null. */
+  /** Regional: регион назначения (buyer-region demand); иначе null. */
   targetMacroRegion: string | null;
   rowKey: string;
 };

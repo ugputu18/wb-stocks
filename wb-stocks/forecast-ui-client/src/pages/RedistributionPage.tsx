@@ -179,11 +179,11 @@ export function RedistributionPage(): JSX.Element {
         <p class="muted">
           <a href={FORECAST_UI_SPA_ROUTES.home}>← К прогнозу</a>
           {" · "}
-          <a href={FORECAST_UI_SPA_ROUTES.warehouseRegionAudit}>Аудит маппинга складов → макрорегион</a>
+          <a href={FORECAST_UI_SPA_ROUTES.warehouseRegionAudit}>Аудит маппинга складов → регион</a>
           {" · "}
           <a href={FORECAST_UI_SPA_ROUTES.regionalDemandDiagnostics}>Регион vs fulfillment</a>
           {" · "}
-          <strong>Regional</strong> (по умолчанию) — цель перераспределения = <strong>макрорегион</strong>{" "}
+          <strong>Regional</strong> (по умолчанию) — цель перераспределения = <strong>регион</strong>{" "}
           (Σ buyer-region demand); склад внутри региона — операционная деталь.{" "}
           <strong>Fulfillment</strong> — цель = <strong>склад исполнения</strong>. Донор всегда
           складовой; эвристика, не оптимизация и не запись в БД.

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "preact/hooks";
 import type { JSX } from "preact";
+import { tableEmptyState, toolbarRow } from "../../styled-system/recipes";
 import { TableHeadHintCell } from "./hints/index.js";
 import { formatInt, formatNum } from "../utils/forecastFormat.js";
 import { supplierRowKey } from "../utils/supplierLookup.js";
@@ -132,7 +133,7 @@ export function SupplierTable({
 
   return (
     <div class="supplier-table-wrap">
-      <div class="supplier-table-toolbar" role="toolbar">
+      <div class={toolbarRow()} role="toolbar">
         <label class="supplier-toolbar-toggle">
           <input
             type="checkbox"
@@ -158,7 +159,7 @@ export function SupplierTable({
         </span>
       </div>
       {emptyAll ? (
-        <div class="table-empty-state">
+        <div class={tableEmptyState()}>
           <p class="table-empty-title">Нет строк закупки</p>
           <p class="muted table-empty-hint">
             Проверьте дату среза, горизонт и поиск. Для supplier-витрины не применяется фильтр «Риск
@@ -166,7 +167,7 @@ export function SupplierTable({
           </p>
         </div>
       ) : empty ? (
-        <div class="table-empty-state">
+        <div class={tableEmptyState()}>
           <p class="table-empty-title">Нет строк по текущим фильтрам таблицы</p>
           <p class="muted table-empty-hint">
             Снимите «Только проблемные» / «Только с заказом» или ослабьте фильтры в форме выше.

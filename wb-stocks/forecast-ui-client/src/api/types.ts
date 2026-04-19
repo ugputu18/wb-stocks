@@ -54,7 +54,7 @@ export interface WarehouseKeysResponse {
   warehouseKeys: string[];
 }
 
-/** POST /api/forecast/regional-demand — снимок спроса по регионам заказа + явный mapping регион → макрорегион. */
+/** POST /api/forecast/regional-demand — снимок спроса по регионам заказа + явный mapping регион заказа → регион (кластер). */
 export interface RegionalDemandResponse {
   snapshotDate?: string;
   rows?: Array<{

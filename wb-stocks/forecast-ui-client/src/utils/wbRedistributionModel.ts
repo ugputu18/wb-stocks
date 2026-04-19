@@ -3,6 +3,8 @@
  * Не меняет pipeline и не пишет в БД — только расчёт поверх строк `wbWarehouses`.
  */
 
+import { normalizeWarehouseName } from "../../../src/domain/warehouseName.js";
+
 export interface WbWarehouseMetrics {
   warehouseKey: string;
   warehouseNameRaw: string;
@@ -49,7 +51,9 @@ export function parseWbWarehouseRow(raw: unknown): WbWarehouseMetrics | null {
   const row = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
   if (!row) return null;
   const wk = row.warehouseKey;
-  if (typeof wk !== "string" || !wk.trim()) return null;
+  if (typeof wk !== "string") return null;
+  const warehouseKeyNorm = normalizeWarehouseName(wk);
+  if (!warehouseKeyNorm) return null;
   const inv = row.inventoryLevels;
   const local =
     inv && typeof inv === "object"
@@ -63,7 +67,7 @@ export function parseWbWarehouseRow(raw: unknown): WbWarehouseMetrics | null {
       : 0;
   const nameRaw = row.warehouseNameRaw;
   return {
-    warehouseKey: wk.trim(),
+    warehouseKey: warehouseKeyNorm,
     warehouseNameRaw: typeof nameRaw === "string" ? nameRaw : wk,
     localAvailable: local,
     forecastDailyDemand: num(row.forecastDailyDemand, 0),
@@ -77,7 +81,7 @@ export function computeWbRedistribution(
   donorWarehouseKey: string,
   donorReserveDays: number,
 ): WbRedistributionResult | null {
-  const dk = donorWarehouseKey.trim().toLowerCase();
+  const dk = normalizeWarehouseName(donorWarehouseKey);
   if (!dk) return null;
   const reserveDays = Number(donorReserveDays);
   if (!Number.isFinite(reserveDays) || reserveDays < 0) return null;
@@ -88,14 +92,14 @@ export function computeWbRedistribution(
     if (p) parsed.push(p);
   }
 
-  const donor = parsed.find((p) => p.warehouseKey.toLowerCase() === dk);
+  const donor = parsed.find((p) => normalizeWarehouseName(p.warehouseKey) === dk);
   if (!donor) return null;
 
   const fd = donor.forecastDailyDemand;
   const donorReserveUnits = fd * reserveDays;
   const donorTransferableUnits = Math.max(0, donor.localAvailable - donorReserveUnits);
 
-  const targetsRaw = parsed.filter((p) => p.warehouseKey.toLowerCase() !== dk);
+  const targetsRaw = parsed.filter((p) => normalizeWarehouseName(p.warehouseKey) !== dk);
   const skippedNonNeedyCount = targetsRaw.filter((p) => p.recommendedToWB <= 0).length;
   const needy = targetsRaw.filter((p) => p.recommendedToWB > 0);
 

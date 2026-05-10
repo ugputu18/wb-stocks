@@ -163,6 +163,7 @@ export interface RegionalStocksQuery {
   riskStockout: RiskStockoutFilter;
   q: string | null;
   limit: number;
+  ownWarehouseCode: string;
 }
 
 export interface RegionalStocksQueryError {
@@ -209,5 +210,6 @@ export function parseRegionalStocksQuery(
     riskStockout: parseRiskStockout(url.searchParams.get("riskStockout")),
     q: url.searchParams.get("q")?.trim() || null,
     limit: parseRowsLimit(url),
+    ownWarehouseCode: parseOwnWarehouseCode(url),
   };
 }

@@ -59,6 +59,7 @@ export interface RegionalStocksResponse {
   horizonDays: number;
   macroRegion: string;
   targetCoverageDays: number;
+  ownWarehouseCode: string;
   summary: {
     totalRows: number;
     risk: {
@@ -68,6 +69,8 @@ export interface RegionalStocksResponse {
       ok: number;
     };
     recommendedToRegionTotal: number;
+    ownWarehouseStockTotal: number;
+    recommendedOrderQtyTotal: number;
   };
   rows: Array<{
     nmId: number;
@@ -81,6 +84,10 @@ export interface RegionalStocksResponse {
     daysOfStockRegional: number;
     stockoutDateEstimate: string | null;
     recommendedToRegion: number;
+    /** Кол-во товара на нашем основном складе (по vendor_code). */
+    ownWarehouseStock: number;
+    /** «Заказ» = max(recommendedToRegion, ownWarehouseStock). */
+    recommendedOrderQty: number;
     stockSnapshotAtMin: string | null;
   }>;
 }

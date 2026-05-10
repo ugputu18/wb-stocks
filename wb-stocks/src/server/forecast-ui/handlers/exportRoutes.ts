@@ -2,11 +2,15 @@ import { toCsv } from "../../csv.js";
 import type { ForecastReportFilter } from "../../../infra/wbForecastSnapshotRepository.js";
 import { json } from "../http/json.js";
 import { sendCsvAttachment } from "../http/sendCsvAttachment.js";
-import { parseQuery } from "../parse/forecastQuery.js";
+import { parseQuery, parseRegionalStocksQuery } from "../parse/forecastQuery.js";
 import { parseRequiredTargetCoverageDays } from "../parse/exportQuery.js";
+import { loadRegionalStocksReport } from "../queries/loadRegionalStocksReport.js";
 import {
   forecastSupplierCsvFilename,
   forecastWbCsvFilename,
+  REGIONAL_STOCKS_EXPORT_COLUMNS,
+  regionalStocksCsvFilename,
+  regionalStocksRowsToCsvObjects,
   supplierRowsToCsvObjects,
   SUPPLIER_EXPORT_COLUMNS,
   SYSTEM_TOTAL_EXPORT_COLUMNS,
@@ -132,6 +136,46 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
         sendCsvAttachment(
           res,
           forecastSupplierCsvFilename(q.snapshotDate, q.horizonDays),
+          csv,
+        );
+      },
+    },
+    {
+      // Только позиции с ненулевым «Заказ» (recommendedOrderQty > 0):
+      // экспорт оптимизирован под кейс "что заказать с производства / у поставщика
+      // под выбранный регион".
+      match: (req, url) =>
+        req.method === "GET" &&
+        url.pathname === "/api/forecast/export-regional-stocks",
+      handle: (req, res, url) => {
+        void req;
+        const q = parseRegionalStocksQuery(url);
+        if (!q.ok) {
+          json(res, 400, { ok: false, error: q.error });
+          return;
+        }
+        const outcome = loadRegionalStocksReport(
+          { db: deps.db, logger: deps.logger },
+          q,
+        );
+        if (!outcome.ok) {
+          json(res, outcome.status, { ok: false, error: outcome.error });
+          return;
+        }
+        const filteredRows = outcome.report.rows.filter(
+          (r) => r.recommendedOrderQty > 0,
+        );
+        const csv = toCsv(
+          regionalStocksRowsToCsvObjects(filteredRows),
+          [...REGIONAL_STOCKS_EXPORT_COLUMNS],
+        );
+        sendCsvAttachment(
+          res,
+          regionalStocksCsvFilename(
+            outcome.report.snapshotDate,
+            outcome.report.horizonDays,
+            outcome.report.macroRegion,
+          ),
           csv,
         );
       },

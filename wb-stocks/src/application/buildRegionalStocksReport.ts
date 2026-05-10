@@ -49,6 +49,23 @@ export interface RegionalStocksReportRow {
   daysOfStockRegional: number;
   stockoutDateEstimate: string | null;
   recommendedToRegion: number;
+  /**
+   * Quantity at our own (default "main") warehouse, looked up by `vendorCode`
+   * from the latest own-stock snapshot. `0` if the SKU is missing from the
+   * snapshot or has no vendor code.
+   */
+  ownWarehouseStock: number;
+  /**
+   * Suggested ship-to-WB quantity for this SKU under the regional plan.
+   *
+   * Defined as `min(recommendedToRegion, ownWarehouseStock)` per product
+   * decision: мы не можем отгрузить в регион больше, чем лежит у нас на
+   * собственном складе, и одновременно не хотим отгружать больше, чем
+   * реально нужно региону (`recommendedToRegion`). Минимум — это то
+   * количество, которое одновременно «закрывает» регион и реально доступно
+   * к отгрузке прямо сейчас.
+   */
+  recommendedOrderQty: number;
   stockSnapshotAtMin: string | null;
 }
 
@@ -61,6 +78,8 @@ export interface RegionalStocksReportSummary {
     ok: number;
   };
   recommendedToRegionTotal: number;
+  ownWarehouseStockTotal: number;
+  recommendedOrderQtyTotal: number;
 }
 
 export interface RegionalStocksReport {
@@ -68,6 +87,7 @@ export interface RegionalStocksReport {
   horizonDays: number;
   macroRegion: string;
   targetCoverageDays: number;
+  ownWarehouseCode: string;
   summary: RegionalStocksReportSummary;
   rows: RegionalStocksReportRow[];
 }
@@ -83,6 +103,17 @@ export interface BuildRegionalStocksReportInput {
   stockRows: readonly RegionalStocksStockInputRow[];
   demandRows: readonly RegionalStocksDemandInputRow[];
   regionMacroLookup: ReadonlyMap<string, string>;
+  /**
+   * vendorCode → quantity at our own warehouse for the relevant snapshot.
+   * Defaults to an empty map (i.e. ownWarehouseStock is 0 everywhere).
+   */
+  ownStockByVendor?: ReadonlyMap<string, number>;
+  /**
+   * Identifier of the own warehouse that {@link ownStockByVendor} was
+   * loaded for. Echoed into the report so that consumers (UI, CSV) can
+   * label the column. Defaults to "main".
+   */
+  ownWarehouseCode?: string;
 }
 
 interface RegionalStockAccumulator {
@@ -125,12 +156,27 @@ function buildSummary(rows: readonly RegionalStocksReportRow[]): RegionalStocksR
     totalRows: rows.length,
     risk: { critical: 0, warning: 0, attention: 0, ok: 0 },
     recommendedToRegionTotal: 0,
+    ownWarehouseStockTotal: 0,
+    recommendedOrderQtyTotal: 0,
   };
   for (const r of rows) {
     summary.risk[r.risk] += 1;
     summary.recommendedToRegionTotal += r.recommendedToRegion;
+    summary.ownWarehouseStockTotal += r.ownWarehouseStock;
+    summary.recommendedOrderQtyTotal += r.recommendedOrderQty;
   }
   return summary;
+}
+
+function ownWarehouseStockForVendor(
+  vendorCode: string | null,
+  ownStockByVendor: ReadonlyMap<string, number> | undefined,
+): number {
+  if (!ownStockByVendor || ownStockByVendor.size === 0) return 0;
+  const v = vendorCode?.trim();
+  if (!v) return 0;
+  const q = ownStockByVendor.get(v);
+  return Number.isFinite(q) ? Math.max(0, Math.trunc(Number(q))) : 0;
 }
 
 export function buildRegionalStocksReport(
@@ -217,10 +263,19 @@ export function buildRegionalStocksReport(
     const risk = riskBucketFromDaysOfStock(
       Math.min(999_999, Math.floor(daysOfStockRegional)),
     );
+    const vendorCode = betterVendorCode(
+      d?.vendorCode ?? null,
+      s?.vendorCode ?? null,
+    );
+    const ownWarehouseStock = ownWarehouseStockForVendor(
+      vendorCode,
+      input.ownStockByVendor,
+    );
+    const recommendedOrderQty = Math.min(recommendedToRegion, ownWarehouseStock);
     allRows.push({
       nmId,
       techSize,
-      vendorCode: betterVendorCode(d?.vendorCode ?? null, s?.vendorCode ?? null),
+      vendorCode,
       risk,
       regionalStartStock,
       regionalIncomingUnits,
@@ -233,6 +288,8 @@ export function buildRegionalStocksReport(
         regionalForecastDailyDemand,
       ),
       recommendedToRegion,
+      ownWarehouseStock,
+      recommendedOrderQty,
       stockSnapshotAtMin: s?.stockSnapshotAtMin ?? null,
     });
   }
@@ -263,6 +320,7 @@ export function buildRegionalStocksReport(
     horizonDays: input.horizonDays,
     macroRegion: input.macroRegion,
     targetCoverageDays: input.targetCoverageDays,
+    ownWarehouseCode: input.ownWarehouseCode?.trim() || "main",
     summary: buildSummary(filtered),
     rows: limited,
   };

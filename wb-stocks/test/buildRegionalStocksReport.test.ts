@@ -42,7 +42,103 @@ describe("buildRegionalStocksReport", () => {
     expect(out.rows[0]!.daysOfStockRegional).toBe(3);
     expect(out.rows[0]!.stockoutDateEstimate).toBe("2026-04-21");
     expect(out.rows[0]!.recommendedToRegion).toBe(390);
+    expect(out.rows[0]!.ownWarehouseStock).toBe(0);
+    expect(out.rows[0]!.recommendedOrderQty).toBe(0); // min(390, 0)
     expect(out.summary.recommendedToRegionTotal).toBe(390);
+    expect(out.summary.ownWarehouseStockTotal).toBe(0);
+    expect(out.summary.recommendedOrderQtyTotal).toBe(0);
+    expect(out.ownWarehouseCode).toBe("main");
+  });
+
+  it("looks up own warehouse stock by vendor code and uses min(need, on_hand) for order qty", () => {
+    const out = buildRegionalStocksReport({
+      snapshotDate: "2026-04-18",
+      horizonDays: 30,
+      macroRegion: "Центральный",
+      targetCoverageDays: 42,
+      ownWarehouseCode: "main",
+      ownStockByVendor: new Map<string, number>([
+        ["A", 1000], // огромный остаток → ограничителем будет «Нужно»
+        ["B", 5], // мало остатка → ограничителем будет «Склад»
+      ]),
+      stockRows: [
+        {
+          warehouseKey: "коледино",
+          nmId: 1,
+          techSize: "0",
+          vendorCode: "A",
+          startStock: 100,
+          incomingUnits: 0,
+          stockSnapshotAt: "2026-04-18T00:00:00Z",
+        },
+        {
+          warehouseKey: "коледино",
+          nmId: 2,
+          techSize: "0",
+          vendorCode: "B",
+          startStock: 0,
+          incomingUnits: 0,
+          stockSnapshotAt: "2026-04-18T00:00:00Z",
+        },
+      ],
+      demandRows: [
+        {
+          regionKey: "buyer-central",
+          nmId: 1,
+          techSize: "0",
+          vendorCode: "A",
+          regionalForecastDailyDemand: 5,
+        },
+        {
+          regionKey: "buyer-central",
+          nmId: 2,
+          techSize: "0",
+          vendorCode: "B",
+          regionalForecastDailyDemand: 10,
+        },
+      ],
+      regionMacroLookup: lookup,
+    });
+
+    const byNm = new Map(out.rows.map((r) => [r.nmId, r]));
+    const a = byNm.get(1)!;
+    expect(a.recommendedToRegion).toBe(110); // 5*42-100
+    expect(a.ownWarehouseStock).toBe(1000);
+    expect(a.recommendedOrderQty).toBe(110); // min(110, 1000)
+
+    const b = byNm.get(2)!;
+    expect(b.recommendedToRegion).toBe(420); // 10*42-0
+    expect(b.ownWarehouseStock).toBe(5);
+    expect(b.recommendedOrderQty).toBe(5); // min(420, 5)
+
+    expect(out.summary.ownWarehouseStockTotal).toBe(1005);
+    expect(out.summary.recommendedOrderQtyTotal).toBe(115);
+    expect(out.ownWarehouseCode).toBe("main");
+  });
+
+  it("treats missing/blank vendor code in own-stock map as zero (and zero order)", () => {
+    const out = buildRegionalStocksReport({
+      snapshotDate: "2026-04-18",
+      horizonDays: 30,
+      macroRegion: "Центральный",
+      targetCoverageDays: 42,
+      ownStockByVendor: new Map<string, number>([["A", 99]]),
+      stockRows: [],
+      demandRows: [
+        {
+          regionKey: "buyer-central",
+          nmId: 9,
+          techSize: "0",
+          vendorCode: null,
+          regionalForecastDailyDemand: 1,
+        },
+      ],
+      regionMacroLookup: lookup,
+    });
+
+    expect(out.rows[0]!.ownWarehouseStock).toBe(0);
+    // Нет vendor_code → склад=0 → min(нужно, 0) = 0.
+    expect(out.rows[0]!.recommendedOrderQty).toBe(0);
   });
 
   it("changes recommendation when target coverage changes", () => {

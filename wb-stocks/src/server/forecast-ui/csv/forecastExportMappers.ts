@@ -1,4 +1,5 @@
 import type { SupplierSkuReplenishmentReadModel } from "../../../domain/multiLevelInventory.js";
+import type { RegionalStocksReportRow } from "../../../application/buildRegionalStocksReport.js";
 import type {
   SystemTotalBySkuReportRow,
   WbForecastSnapshotReportRow,
@@ -86,12 +87,73 @@ export const SUPPLIER_EXPORT_COLUMNS = [
   "days_until_stockout",
 ] as const;
 
+/**
+ * Колонки CSV-выгрузки страницы «Запасы WB по региону».
+ *
+ * Имена колонок и их порядок умышленно совпадают 1:1 с заголовками таблицы
+ * на странице (`RegionalStocksPage.tsx`) — оператор открывает CSV в Excel и
+ * видит ровно ту же шапку, что и в UI. Любое расхождение между UI и CSV в
+ * этом списке будет восприниматься как баг.
+ */
+export const REGIONAL_STOCKS_EXPORT_COLUMNS = [
+  "Риск",
+  "vendor",
+  "nm_id",
+  "Размер",
+  "Доступно в регионе",
+  "Спрос/день",
+  "Дней запаса",
+  "OOS",
+  "Нужно",
+  "Склад",
+  "Заказ",
+] as const;
+
 export function forecastWbCsvFilename(snapshotDate: string, horizonDays: number): string {
   return `wb-replenishment-${snapshotDate}-h${horizonDays}.csv`;
 }
 
 export function forecastSupplierCsvFilename(snapshotDate: string, horizonDays: number): string {
   return `supplier-replenishment-${snapshotDate}-h${horizonDays}.csv`;
+}
+
+/**
+ * Файл экспорта по странице "Запасы WB по региону".
+ * Кодируем макрорегион в имени, чтобы аналитик не перепутал выгрузки по
+ * разным регионам (имя кириллическое — браузер сохранит как есть).
+ */
+export function regionalStocksCsvFilename(
+  snapshotDate: string,
+  horizonDays: number,
+  macroRegion: string,
+): string {
+  const safeMacro = macroRegion.replace(/[\\/:*?"<>|\s]+/g, "_");
+  return `regional-stocks-${safeMacro}-${snapshotDate}-h${horizonDays}.csv`;
+}
+
+/**
+ * Маппинг строк отчёта в формат для `toCsv`. Имена ключей в точности
+ * совпадают с заголовками таблицы UI (см. `REGIONAL_STOCKS_EXPORT_COLUMNS`).
+ *
+ * Экспортируется ВСЁ что приходит — фильтрация «Заказ > 0» делается на
+ * стороне роута (см. `exportRoutes.ts`).
+ */
+export function regionalStocksRowsToCsvObjects(
+  rows: readonly RegionalStocksReportRow[],
+): Record<string, unknown>[] {
+  return rows.map((row) => ({
+    "Риск": row.risk,
+    vendor: row.vendorCode ?? "",
+    nm_id: row.nmId,
+    "Размер": row.techSize,
+    "Доступно в регионе": row.regionalAvailable,
+    "Спрос/день": row.regionalForecastDailyDemand,
+    "Дней запаса": row.daysOfStockRegional,
+    OOS: row.stockoutDateEstimate ?? "",
+    "Нужно": row.recommendedToRegion,
+    "Склад": row.ownWarehouseStock,
+    "Заказ": row.recommendedOrderQty,
+  }));
 }
 
 export function wbTotalRowsToCsvObjects(

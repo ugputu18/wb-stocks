@@ -204,8 +204,20 @@ export async function downloadForecastCsv(
   let filename = fallbackFilename;
   const cd = res.headers.get("Content-Disposition");
   if (cd) {
-    const m = /filename="([^"]+)"/.exec(cd);
-    if (m) filename = m[1];
+    // Prefer RFC 5987 `filename*=UTF-8''...` (carries non-ASCII names like
+    // кириллический регион), fall back to legacy `filename="..."`.
+    const star = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(cd);
+    if (star) {
+      try {
+        filename = decodeURIComponent(star[1].trim());
+      } catch {
+        // ignore; fall through to legacy parse
+      }
+    }
+    if (filename === fallbackFilename) {
+      const m = /filename="([^"]+)"/.exec(cd);
+      if (m) filename = m[1];
+    }
   }
   if (!res.ok) {
     const text = await res.text();

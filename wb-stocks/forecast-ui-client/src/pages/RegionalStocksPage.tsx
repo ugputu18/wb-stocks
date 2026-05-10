@@ -1,6 +1,7 @@
 import type { JSX } from "preact";
 import { useCallback, useMemo, useState } from "preact/hooks";
 import {
+  downloadForecastCsv,
   fetchRegionalStocks,
   ForecastApiError,
 } from "../api/client.js";
@@ -93,6 +94,7 @@ export function RegionalStocksPage(): JSX.Element {
   const [apiToken, setApiToken] = useState("");
   const [data, setData] = useState<RegionalStocksResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const sp = useMemo(() => buildSearchParams(form), [form]);
@@ -121,7 +123,32 @@ export function RegionalStocksPage(): JSX.Element {
     }
   }, [apiToken, sp]);
 
+  const exportCsv = useCallback(async () => {
+    setExporting(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams(sp);
+      // Сервер уже фильтрует по recommendedOrderQty > 0, лимит UI здесь
+      // не нужен — экспортируем все позиции к заказу.
+      params.delete("limit");
+      const qs = params.toString();
+      await downloadForecastCsv(
+        `/api/forecast/export-regional-stocks${qs ? `?${qs}` : ""}`,
+        apiToken,
+        `regional-stocks-${form.macroRegion}-${form.snapshotDate}-h${form.horizonDays}.csv`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExporting(false);
+    }
+  }, [apiToken, form.horizonDays, form.macroRegion, form.snapshotDate, sp]);
+
   const summary = data?.summary;
+  const orderableRowCount = useMemo(
+    () => data?.rows.filter((r) => r.recommendedOrderQty > 0).length ?? 0,
+    [data],
+  );
 
   return (
     <div class="forecast-next-root regional-stocks-page">
@@ -255,8 +282,16 @@ export function RegionalStocksPage(): JSX.Element {
             {summaryCell("< 30 дн.", summary.risk.attention, "risk-attention")}
             {summaryCell("OK ≥30", summary.risk.ok, "risk-ok")}
             {summaryCell(
-              "Довезти в регион",
+              "Нужно в регион",
               formatInt(summary.recommendedToRegionTotal),
+            )}
+            {summaryCell(
+              `Склад «${data?.ownWarehouseCode ?? "main"}»`,
+              formatInt(summary.ownWarehouseStockTotal),
+            )}
+            {summaryCell(
+              "Заказ (min Нужно/Склад)",
+              formatInt(summary.recommendedOrderQtyTotal),
             )}
           </div>
         </section>
@@ -264,9 +299,29 @@ export function RegionalStocksPage(): JSX.Element {
 
       {data ? (
         <section class="panel regional-stocks-table-panel">
-          <h2>
-            {data.macroRegion} · цель {data.targetCoverageDays} дн.
-          </h2>
+          <div class="regional-stocks-table-header">
+            <h2>
+              {data.macroRegion} · цель {data.targetCoverageDays} дн.
+            </h2>
+            <div class="regional-stocks-table-actions">
+              <span class="muted regional-stocks-export-hint">
+                {orderableRowCount > 0
+                  ? `К заказу: ${orderableRowCount} ${
+                      orderableRowCount === 1 ? "позиция" : "позиций"
+                    }`
+                  : "Нет позиций к заказу"}
+              </span>
+              <button
+                type="button"
+                class="btn-load"
+                disabled={exporting || orderableRowCount === 0}
+                onClick={() => void exportCsv()}
+                title="Экспортировать в CSV только позиции с ненулевым «Заказ»"
+              >
+                {exporting ? "Экспорт…" : "Экспорт в CSV"}
+              </button>
+            </div>
+          </div>
           {data.rows.length ? (
             <div class="table-wrap">
               <table class="regional-stocks-table">
@@ -280,7 +335,15 @@ export function RegionalStocksPage(): JSX.Element {
                     <th>Спрос/день</th>
                     <th>Дней запаса</th>
                     <th>OOS</th>
-                    <th>Довезти</th>
+                    <th title="Сколько единиц нужно довезти в регион, чтобы закрыть целевое покрытие">
+                      Нужно
+                    </th>
+                    <th title={`Остаток на нашем складе «${data.ownWarehouseCode}» по vendor_code`}>
+                      Склад
+                    </th>
+                    <th title="Заказ = min(Нужно, Склад) — сколько реально можно отгрузить под потребность региона">
+                      Заказ
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -301,6 +364,10 @@ export function RegionalStocksPage(): JSX.Element {
                       <td>{formatNum(r.daysOfStockRegional)}</td>
                       <td>{r.stockoutDateEstimate ?? ""}</td>
                       <td>{formatInt(r.recommendedToRegion)}</td>
+                      <td>{formatInt(r.ownWarehouseStock)}</td>
+                      <td class={r.recommendedOrderQty > 0 ? "regional-stocks-order-cell" : undefined}>
+                        {formatInt(r.recommendedOrderQty)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -361,6 +428,28 @@ export function RegionalStocksPage(): JSX.Element {
         .regional-stocks-page .regional-stocks-table td:nth-child(2) {
           white-space: normal;
           min-width: 8rem;
+        }
+        .regional-stocks-page .regional-stocks-table-header {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.6rem 1rem;
+          margin-bottom: 0.4rem;
+        }
+        .regional-stocks-page .regional-stocks-table-header h2 {
+          margin: 0;
+        }
+        .regional-stocks-page .regional-stocks-table-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.6rem;
+        }
+        .regional-stocks-page .regional-stocks-export-hint {
+          font-size: 0.82rem;
+        }
+        .regional-stocks-page .regional-stocks-order-cell {
+          font-weight: 650;
         }
       `}</style>
     </div>

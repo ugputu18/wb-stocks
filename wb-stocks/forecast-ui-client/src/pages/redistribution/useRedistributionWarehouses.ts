@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
-import { fetchForecastRows, fetchWarehouseKeys } from "../../api/client.js";
+import {
+  fetchForecastRows,
+  fetchWarehouseKeys,
+  postForecastRecalculate,
+} from "../../api/client.js";
 import type { ForecastUrlFormState } from "../../state/urlState.js";
 import {
   toDonorWarehouseRowsParams,
@@ -23,6 +27,9 @@ export function useRedistributionWarehouses(
   warehouseStats: Map<string, WarehouseOptionStats>;
   statsLoading: boolean;
   loadWarehouseStats: () => Promise<void>;
+  refreshFromWb: () => Promise<void>;
+  refreshFromWbLoading: boolean;
+  refreshFromWbError: string | null;
   donorSelectKeys: string[];
   warehouseStatsAgeLabel: string | null;
 } {
@@ -33,6 +40,8 @@ export function useRedistributionWarehouses(
   const [statsLoading, setStatsLoading] = useState(false);
   const [warehouseStatsFetchedAt, setWarehouseStatsFetchedAt] = useState<number | null>(null);
   const [warehouseStatsAgeTick, setWarehouseStatsAgeTick] = useState(0);
+  const [refreshFromWbLoading, setRefreshFromWbLoading] = useState(false);
+  const [refreshFromWbError, setRefreshFromWbError] = useState<string | null>(null);
 
   const donorSelectKeys = useMemo(() => {
     if (warehouseKeys.length === 0) return [];
@@ -48,6 +57,16 @@ export function useRedistributionWarehouses(
     if (!donorKey.trim()) return;
     if (!donorSelectKeys.includes(donorKey)) setDonorKey("");
   }, [donorKey, donorSelectKeys, setDonorKey]);
+
+  const reloadWarehouseKeys = useCallback(async () => {
+    try {
+      const sp = toWarehouseKeysSearchParams(form);
+      const res = await fetchWarehouseKeys(sp, apiToken);
+      setWarehouseKeys(Array.isArray(res.warehouseKeys) ? res.warehouseKeys : []);
+    } catch {
+      setWarehouseKeys([]);
+    }
+  }, [form, apiToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,11 +142,44 @@ export function useRedistributionWarehouses(
     return formatWarehouseStatsAgeRu(warehouseStatsFetchedAt);
   }, [warehouseStatsFetchedAt, warehouseStatsAgeTick]);
 
+  /**
+   * Полное обновление по WB: тянет с WB API свежие остатки и заказы за окно
+   * спроса, пересчитывает demand+forecast на сервере, затем обновляет на
+   * клиенте список складов и Σ-статистику. Используется кнопкой
+   * «Обновить данные WB».
+   */
+  const refreshFromWb = useCallback(async () => {
+    setRefreshFromWbLoading(true);
+    setRefreshFromWbError(null);
+    try {
+      const h = Number(form.horizonDays);
+      const horizon = Number.isFinite(h) && h > 0 ? Math.trunc(h) : 30;
+      await postForecastRecalculate(
+        {
+          snapshotDate: form.snapshotDate,
+          horizons: [horizon],
+          dryRun: false,
+        },
+        apiToken,
+      );
+      await reloadWarehouseKeys();
+      await loadWarehouseStats();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setRefreshFromWbError(msg);
+    } finally {
+      setRefreshFromWbLoading(false);
+    }
+  }, [form.snapshotDate, form.horizonDays, apiToken, reloadWarehouseKeys, loadWarehouseStats]);
+
   return {
     warehouseKeys,
     warehouseStats,
     statsLoading,
     loadWarehouseStats,
+    refreshFromWb,
+    refreshFromWbLoading,
+    refreshFromWbError,
     donorSelectKeys,
     warehouseStatsAgeLabel,
   };

@@ -3,6 +3,7 @@ import {
   normalizeForecastUiPathname,
   REDISTRIBUTION_ROUTE,
   REGIONAL_DEMAND_DIAGNOSTICS_ROUTE,
+  REGIONAL_STOCKS_ROUTE,
   WAREHOUSE_REGION_AUDIT_ROUTE,
 } from "./routes.js";
 import "./forecast-ui-theme.css";
@@ -12,6 +13,7 @@ import "./pages/forecast-page.css";
 import { App } from "./App.js";
 import { RedistributionPage } from "./pages/RedistributionPage.js";
 import { RegionalDemandDiagnosticsPage } from "./pages/RegionalDemandDiagnosticsPage.js";
+import { RegionalStocksPage } from "./pages/RegionalStocksPage.js";
 import { WarehouseRegionAuditPage } from "./pages/WarehouseRegionAuditPage.js";
 
 function routePath(): string {
@@ -23,6 +25,9 @@ function Root() {
   const p = routePath();
   if (p === REDISTRIBUTION_ROUTE) {
     return <RedistributionPage />;
+  }
+  if (p === REGIONAL_STOCKS_ROUTE) {
+    return <RegionalStocksPage />;
   }
   if (p === WAREHOUSE_REGION_AUDIT_ROUTE) {
     return <WarehouseRegionAuditPage />;

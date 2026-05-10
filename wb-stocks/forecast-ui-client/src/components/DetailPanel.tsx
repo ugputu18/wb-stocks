@@ -149,12 +149,12 @@ export function DetailPanel({ row, viewMode, explainFocus, supplierRows }: Props
       ["vendor_code", r.vendorCode],
       ["Штрихкод", r.barcode],
       [
-        "Продажи 7д / 30д (шт.)",
-        [r.units7, r.units30].filter((x) => x != null).join(" / "),
+        "Продажи 7д / 30д / 90д (шт.)",
+        [r.units7, r.units30, r.units90].filter((x) => x != null).join(" / "),
       ],
       [
-        "Средний спрос 7д / 30д",
-        [formatNum(r.avgDaily7), formatNum(r.avgDaily30)].join(" / "),
+        "Средний спрос 7д / 30д / 90д",
+        [formatNum(r.avgDaily7), formatNum(r.avgDaily30), formatNum(r.avgDaily90)].join(" / "),
       ],
       ["Базовый спрос (сглаж.)", formatDetailVal(r.baseDailyDemand)],
       [

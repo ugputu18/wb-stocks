@@ -39,6 +39,31 @@ export class OwnStockSnapshotRepository {
     return m;
   }
 
+  /**
+   * Vendor → quantity для **самой свежей** даты снимка по складу (`MAX(snapshot_date)`),
+   * независимо от даты среза WB в `wb_forecast_snapshots`.
+   * Если снимков нет — пустая карта.
+   */
+  quantitiesByVendorLatest(
+    warehouseCode: string = DEFAULT_WAREHOUSE_CODE,
+  ): Map<string, number> {
+    const rows = this.db
+      .prepare(
+        `SELECT vendor_code AS v, quantity AS q
+           FROM own_stock_snapshots
+          WHERE warehouse_code = ?
+            AND snapshot_date = (
+              SELECT MAX(snapshot_date) FROM own_stock_snapshots WHERE warehouse_code = ?
+            )`,
+      )
+      .all(warehouseCode, warehouseCode) as { v: string; q: number }[];
+    const m = new Map<string, number>();
+    for (const r of rows) {
+      m.set(String(r.v).trim(), Number(r.q));
+    }
+    return m;
+  }
+
   countForDate(snapshotDate: string, warehouseCode: string): number {
     const row = this.db
       .prepare(

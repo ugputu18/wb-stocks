@@ -13,6 +13,10 @@ import {
   type ImportWbOrdersResult,
 } from "./importWbOrders.js";
 import {
+  importWbStocks,
+  type ImportWbStocksResult,
+} from "./importWbStocks.js";
+import {
   computeDemandSnapshot,
   type ComputeDemandSnapshotResult,
 } from "./computeDemandSnapshot.js";
@@ -45,6 +49,18 @@ export interface RunSalesForecastMvpOptions {
   dryRun?: boolean;
   sku?: string;
   warehouse?: string;
+  /**
+   * Подтягивать ли свежие остатки WB перед пересчётом demand/forecast.
+   * `true` (по умолчанию) — добавляет в pipeline вызов `importWbStocks`,
+   * чтобы forecast пинил свежий `wb_stock_snapshots.snapshot_at`.
+   *
+   * Работает идемпотентно: импорт стоков — append-only по `snapshot_at`
+   * (≈ now()), история сохраняется. Forecast выберет новый снэпшот
+   * только если `snapshotDate` >= даты импорта (по UTC end-of-day),
+   * поэтому для прошлых дат свежий импорт не повлияет на forecast,
+   * но будет лежать в БД.
+   */
+  refreshStocks?: boolean;
 }
 
 export interface RunSalesForecastMvpResult {
@@ -55,6 +71,8 @@ export interface RunSalesForecastMvpResult {
   warehouse: string | null;
   ordersWindowFrom: string;
   ordersWindowTo: string;
+  /** `null`, если `refreshStocks=false`. */
+  stockImport: ImportWbStocksResult | null;
   ordersImport: ImportWbOrdersResult;
   demandSnapshot: ComputeDemandSnapshotResult;
   regionDemandSnapshot: ComputeRegionDemandSnapshotResult;
@@ -64,9 +82,13 @@ export interface RunSalesForecastMvpResult {
 
 const DEFAULT_HORIZONS = [30, 60, 90];
 const DRY_RUN_SAVEPOINT = "sales_forecast_mvp_dry_run";
+const DEMAND_LOOKBACK_DAYS = 90;
+const ORDERS_IMPORT_MAX_PAGES = 30;
 
 /**
- * End-to-end happy path used by the CLI:
+ * End-to-end happy path used by the CLI и UI «Обновить данные WB»:
+ * 0. (опц.) подтянуть свежий снэпшот остатков WB (`importWbStocks`),
+ *    чтобы forecast мог пиниться от свежего `wb_stock_snapshots.snapshot_at`
  * 1. pull the exact orders window needed for the demand snapshot
  * 2. recompute the demand snapshot for `snapshotDate`
  * 3. recompute forecast slices for all requested horizons
@@ -77,13 +99,15 @@ const DRY_RUN_SAVEPOINT = "sales_forecast_mvp_dry_run";
  * Dry-run is implemented via a SQLite savepoint + `ROLLBACK TO SAVEPOINT`
  * on the **same** DB connection **after** all steps complete successfully.
  * That rolls back writes to:
+ * - `wb_stock_snapshots` (новый append-only snapshot, созданный шагом 0)
  * - `wb_orders_daily` / `wb_orders_daily_by_region` (order import replace-by-day)
  * - `wb_demand_snapshots` / `wb_region_demand_snapshots` (demand replace-by-date)
  * - `wb_forecast_snapshots` (forecast replace per horizon/scope)
  *
- * Rows written **before** the savepoint (e.g. a prior `pnpm import:stocks`
- * in the same file) are unaffected. This gives truthful row counts in the
- * JSON output while leaving the on-disk DB unchanged for this run.
+ * Rows written **before** the savepoint (например, более ранний
+ * `pnpm import:stocks` или существующие исторические снэпшоты) не
+ * затрагиваются. Это даёт честные row counts в JSON-ответе, а на диске
+ * после dry-run БД остаётся в исходном виде.
  */
 export async function runSalesForecastMvp(
   deps: RunSalesForecastMvpDeps,
@@ -109,7 +133,8 @@ export async function runSalesForecastMvp(
   const dryRun = options.dryRun === true;
   const sku = normalizeOptionalArg(options.sku);
   const warehouse = normalizeOptionalArg(options.warehouse);
-  const ordersWindowFrom = addDays(snapshotDate, -30);
+  const refreshStocks = options.refreshStocks !== false;
+  const ordersWindowFrom = addDays(snapshotDate, -DEMAND_LOOKBACK_DAYS);
   const ordersWindowTo = addDays(snapshotDate, -1);
 
   logger.info(
@@ -119,6 +144,7 @@ export async function runSalesForecastMvp(
       dryRun,
       sku,
       warehouse,
+      refreshStocks,
       ordersWindowFrom,
       ordersWindowTo,
     },
@@ -130,6 +156,28 @@ export async function runSalesForecastMvp(
   }
 
   try {
+    let stockImport: ImportWbStocksResult | null = null;
+    if (refreshStocks) {
+      stockImport = await importWbStocks(
+        {
+          wbClient,
+          repository: stockRepository,
+          logger,
+          now,
+        },
+        {},
+      );
+      logger.info(
+        {
+          snapshotAt: stockImport.snapshotAt,
+          fetched: stockImport.fetched,
+          inserted: stockImport.inserted,
+          skipped: stockImport.skipped,
+        },
+        "WB sales forecast MVP: stocks refreshed",
+      );
+    }
+
     const ordersImport = await importWbOrders(
       {
         wbClient,
@@ -141,6 +189,7 @@ export async function runSalesForecastMvp(
       {
         dateFrom: ordersWindowFrom,
         dateTo: ordersWindowTo,
+        maxPages: ORDERS_IMPORT_MAX_PAGES,
         dryRun: false,
       },
     );
@@ -248,6 +297,7 @@ export async function runSalesForecastMvp(
       warehouse,
       ordersWindowFrom,
       ordersWindowTo,
+      stockImport,
       ordersImport: patchDryRunFlag(ordersImport, dryRun),
       demandSnapshot: patchDryRunFlag(demandSnapshot, dryRun),
       regionDemandSnapshot: patchDryRunFlag(regionDemandSnapshot, dryRun),

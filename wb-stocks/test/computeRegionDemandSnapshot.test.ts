@@ -43,31 +43,63 @@ function regionOrder(
   };
 }
 
+function addDays(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split("-").map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d) + days * 24 * 60 * 60 * 1000);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+}
+
 describe("buildRegionDemandRecords", () => {
   const SNAP = "2026-04-17";
   const TO = "2026-04-16";
 
   it("mirrors warehouse demand math for region buckets", () => {
     const rows: WbOrdersDailyRegionRecord[] = [];
-    for (let i = 0; i < 30; i += 1) {
-      const d = `2026-${i < 14 ? "03" : "04"}-${String(
-        i < 14 ? 18 + i : i - 13,
-      ).padStart(2, "0")}`;
-      rows.push(regionOrder(d, 1));
+    for (let i = 89; i >= 0; i -= 1) {
+      rows.push(regionOrder(addDays(TO, -i), 1));
     }
     const out = buildRegionDemandRecords(rows, SNAP, TO, "now");
     expect(out).toHaveLength(1);
     const r = out[0]!;
     expect(r.regionKey).toBe("москва");
+    expect(r.units7).toBe(7);
+    expect(r.units30).toBe(30);
+    expect(r.units90).toBe(90);
+    expect(r.avgDaily90).toBeCloseTo(1, 10);
     expect(r.regionalForecastDailyDemand).toBeCloseTo(1, 10);
+  });
+
+  it("uses 30-day fallback when regional avgDaily7 is zero", () => {
+    const rows: WbOrdersDailyRegionRecord[] = [];
+    for (let day = 1; day <= 9; day += 1) {
+      rows.push(regionOrder(`2026-04-${String(day).padStart(2, "0")}`, 3));
+    }
+    const r = buildRegionDemandRecords(rows, SNAP, TO, "now")[0]!;
+    expect(r.units7).toBe(0);
+    expect(r.units30).toBe(27);
+    expect(r.units90).toBe(27);
+    expect(r.baseDailyDemand).toBeCloseTo(0.5 * 0.9 + 0.3 * 0.9 + 0.2 * 0.3, 10);
+    expect(r.trendRatioClamped).toBe(0.75);
+  });
+
+  it("uses 90-day fallback when regional avgDaily7/30 are zero", () => {
+    const rows: WbOrdersDailyRegionRecord[] = [];
+    for (let i = 89; i >= 30; i -= 1) {
+      rows.push(regionOrder(addDays(TO, -i), 1));
+    }
+    const r = buildRegionDemandRecords(rows, SNAP, TO, "now")[0]!;
+    expect(r.units7).toBe(0);
+    expect(r.units30).toBe(0);
+    expect(r.units90).toBe(60);
+    expect(r.avgDaily90).toBeCloseTo(60 / 90, 10);
+    expect(r.baseDailyDemand).toBeCloseTo(60 / 90, 10);
+    expect(r.regionalForecastDailyDemand).toBeCloseTo((60 / 90) * 0.75, 10);
   });
 
   it("keeps separate rows per region key", () => {
     const rows: WbOrdersDailyRegionRecord[] = [];
-    for (let i = 0; i < 30; i += 1) {
-      const d = `2026-${i < 14 ? "03" : "04"}-${String(
-        i < 14 ? 18 + i : i - 13,
-      ).padStart(2, "0")}`;
+    for (let i = 89; i >= 0; i -= 1) {
+      const d = addDays(TO, -i);
       rows.push(regionOrder(d, 1));
       rows.push(regionOrder(d, 1, { regionKey: "новосибирск", regionNameRaw: "Новосибирск" }));
     }

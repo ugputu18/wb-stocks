@@ -2,6 +2,7 @@ import type {
   ForecastRowsResponse,
   ForecastSummaryResponse,
   RegionalDemandResponse,
+  RegionalStocksResponse,
   RegionalVsWarehouseSummaryResponse,
   SupplierReplenishmentResponse,
   WarehouseKeysResponse,
@@ -131,6 +132,16 @@ export async function fetchWarehouseKeys(
 ): Promise<WarehouseKeysResponse> {
   return apiJson<WarehouseKeysResponse>(
     `/api/forecast/warehouse-keys${buildApiSearchParams(sp)}`,
+    { bearerToken: token },
+  );
+}
+
+export async function fetchRegionalStocks(
+  sp: URLSearchParams,
+  token?: string,
+): Promise<RegionalStocksResponse> {
+  return apiJson<RegionalStocksResponse>(
+    `/api/forecast/regional-stocks${buildApiSearchParams(sp)}`,
     { bearerToken: token },
   );
 }

@@ -74,8 +74,10 @@ export class WbForecastReportQueryService {
                 barcode               AS barcode,
                 units7                AS units7,
                 units30               AS units30,
+                units90               AS units90,
                 avg_daily_7           AS avgDaily7,
                 avg_daily_30          AS avgDaily30,
+                avg_daily_90          AS avgDaily90,
                 base_daily_demand     AS baseDailyDemand,
                 trend_ratio           AS trendRatio,
                 trend_ratio_clamped   AS trendRatioClamped,
@@ -101,7 +103,7 @@ export class WbForecastReportQueryService {
     const ownWh = filter.ownWarehouseCode?.trim() || DEFAULT_WAREHOUSE_CODE;
     const ownByVendor = new OwnStockSnapshotRepository(
       this.db,
-    ).quantitiesByVendor(snapshotDate, ownWh);
+    ).quantitiesByVendorLatest(ownWh);
 
     return rows.map((r) => enrichReportRow(r, filter, wbTotals, ownByVendor));
   }
@@ -148,7 +150,7 @@ export class WbForecastReportQueryService {
     const ownWh = filter.ownWarehouseCode?.trim() || DEFAULT_WAREHOUSE_CODE;
     const ownByVendor = new OwnStockSnapshotRepository(
       this.db,
-    ).quantitiesByVendor(snapshotDate, ownWh);
+    ).quantitiesByVendorLatest(ownWh);
 
     const leadDays =
       filter.supplierLeadTimeDays !== undefined &&
@@ -331,7 +333,7 @@ export class WbForecastReportQueryService {
     const ownWh = filter.ownWarehouseCode?.trim() || DEFAULT_WAREHOUSE_CODE;
     const ownByVendor = new OwnStockSnapshotRepository(
       this.db,
-    ).quantitiesByVendor(snapshotDate, ownWh);
+    ).quantitiesByVendorLatest(ownWh);
     const tc = filter.replenishmentTargetCoverageDays;
 
     const out: WbTotalBySkuReportRow[] = [];
@@ -428,7 +430,7 @@ export class WbForecastReportQueryService {
     const ownWh = filter.ownWarehouseCode?.trim() || DEFAULT_WAREHOUSE_CODE;
     const ownByVendor = new OwnStockSnapshotRepository(
       this.db,
-    ).quantitiesByVendor(snapshotDate, ownWh);
+    ).quantitiesByVendorLatest(ownWh);
     const tc = filter.replenishmentTargetCoverageDays;
 
     const supplierBySku = new Map<string, SupplierSkuReplenishmentReadModel>();

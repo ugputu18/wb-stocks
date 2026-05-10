@@ -23,15 +23,44 @@ function silentLogger() {
   } as unknown as Parameters<typeof runSalesForecastMvp>[0]["logger"];
 }
 
-function fakeClient(pages: unknown[][]): WbStatsClient {
+function fakeClient(
+  pages: unknown[][],
+  stockRows: unknown[] = [],
+): WbStatsClient {
   const calls: unknown[] = [];
-  const fn = vi.fn(async (params: unknown) => {
+  const ordersFn = vi.fn(async (params: unknown) => {
     calls.push(params);
     return pages[Math.min(calls.length - 1, pages.length - 1)] ?? [];
   });
+  const stocksFn = vi.fn(async () => stockRows);
   return {
-    getSupplierOrders: fn,
+    getSupplierOrders: ordersFn,
+    getSupplierStocks: stocksFn,
   } as unknown as WbStatsClient;
+}
+
+function rawWbStockRow(overrides: Record<string, unknown> = {}): unknown {
+  return {
+    lastChangeDate: "2026-04-17T08:00:00Z",
+    warehouseName: "Коледино",
+    supplierArticle: "SKU-1",
+    nmId: 42,
+    barcode: "111",
+    quantity: 10,
+    inWayToClient: 0,
+    inWayFromClient: 0,
+    quantityFull: 10,
+    category: "Cat",
+    subject: "Sub",
+    brand: "Brand",
+    techSize: "0",
+    Price: 100,
+    Discount: 0,
+    isSupply: true,
+    isRealization: false,
+    SCCode: "",
+    ...overrides,
+  };
 }
 
 function orderRow(overrides: Record<string, unknown> = {}) {
@@ -109,12 +138,14 @@ describe("runSalesForecastMvp", () => {
       {
         snapshotDate: "2026-04-17",
         horizons: [60, 30],
+        refreshStocks: false,
       },
     );
 
-    expect(result.ordersWindowFrom).toBe("2026-03-18");
+    expect(result.ordersWindowFrom).toBe("2026-01-17");
     expect(result.ordersWindowTo).toBe("2026-04-16");
     expect(result.horizons).toEqual([30, 60]);
+    expect(result.stockImport).toBeNull();
     expect(result.ordersImport.rowsInserted).toBe(1);
     expect(result.ordersImport.regionRowsInserted).toBe(1);
     expect(result.demandSnapshot.rowsInserted).toBe(1);
@@ -127,6 +158,40 @@ describe("runSalesForecastMvp", () => {
     expect(regionDemandRepository.countForDate("2026-04-17")).toBe(1);
     expect(forecastRepository.countForKey("2026-04-17", 30)).toBe(1);
     expect(forecastRepository.countForKey("2026-04-17", 60)).toBe(1);
+  });
+
+  it("with refreshStocks=true (default) pulls a fresh wb_stock_snapshots row before forecast", async () => {
+    const wbClient = fakeClient(
+      [[orderRow({ srid: "a" })]],
+      [rawWbStockRow({ quantity: 50, quantityFull: 50, lastChangeDate: "2026-04-17T11:59:00Z" })],
+    );
+
+    const result = await runSalesForecastMvp(
+      {
+        db,
+        wbClient,
+        ordersRepository,
+        ordersByRegionRepository,
+        demandRepository,
+        regionDemandRepository,
+        stockRepository,
+        supplyRepository,
+        forecastRepository,
+        logger,
+        now: () => new Date("2026-04-17T12:00:00.000Z"),
+      },
+      {
+        snapshotDate: "2026-04-17",
+        horizons: [30],
+      },
+    );
+
+    expect(result.stockImport).not.toBeNull();
+    expect(result.stockImport!.snapshotAt).toBe("2026-04-17T12:00:00.000Z");
+    expect(result.stockImport!.fetched).toBe(1);
+    expect(result.stockImport!.inserted).toBe(1);
+    expect(stockRepository.countForSnapshot("2026-04-17T12:00:00.000Z")).toBe(1);
+    expect(forecastRepository.countForKey("2026-04-17", 30)).toBe(1);
   });
 
   it("implements dry-run via rollback: returns real counts but leaves DB unchanged", async () => {
@@ -150,6 +215,7 @@ describe("runSalesForecastMvp", () => {
         snapshotDate: "2026-04-17",
         horizons: [30],
         dryRun: true,
+        refreshStocks: false,
       },
     );
 
@@ -192,10 +258,47 @@ describe("runSalesForecastMvp", () => {
         snapshotDate: "2026-04-17",
         horizons: [30],
         dryRun: true,
+        refreshStocks: false,
       },
     );
 
     expect(stockRepository.countForSnapshot("2026-04-17T08:00:00.000Z")).toBe(preCount);
     expect(ordersRepository.countAll()).toBe(0);
+  });
+
+  it("dry-run rolls back the freshly imported wb_stock_snapshots row but keeps prior snapshots", async () => {
+    const preCount = stockRepository.countForSnapshot("2026-04-17T08:00:00.000Z");
+    expect(preCount).toBe(1);
+
+    const wbClient = fakeClient(
+      [[orderRow({ srid: "a" })]],
+      [rawWbStockRow({ quantity: 99, quantityFull: 99, lastChangeDate: "2026-04-17T11:59:00Z" })],
+    );
+
+    const result = await runSalesForecastMvp(
+      {
+        db,
+        wbClient,
+        ordersRepository,
+        ordersByRegionRepository,
+        demandRepository,
+        regionDemandRepository,
+        stockRepository,
+        supplyRepository,
+        forecastRepository,
+        logger,
+        now: () => new Date("2026-04-17T12:00:00.000Z"),
+      },
+      {
+        snapshotDate: "2026-04-17",
+        horizons: [30],
+        dryRun: true,
+      },
+    );
+
+    expect(result.stockImport).not.toBeNull();
+    expect(result.stockImport!.inserted).toBe(1);
+    expect(stockRepository.countForSnapshot("2026-04-17T08:00:00.000Z")).toBe(preCount);
+    expect(stockRepository.countForSnapshot("2026-04-17T12:00:00.000Z")).toBe(0);
   });
 });

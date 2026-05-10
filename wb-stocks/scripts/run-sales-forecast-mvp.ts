@@ -23,7 +23,7 @@ function printUsageAndExit(): never {
       "                                        [--warehouse=Коледино]",
       "",
       "Notes:",
-      "  - Always re-imports orders for [date-30, date-1] and recomputes the full demand snapshot for --date.",
+      "  - Always re-imports orders for [date-90, date-1] and recomputes the full demand snapshot for --date.",
       "  - --sku and --warehouse only narrow which wb_forecast_snapshots rows are deleted+re-inserted per horizon;",
       "    they do NOT limit orders import or demand snapshot (see ReadmeAI §12).",
       "",

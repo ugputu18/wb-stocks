@@ -77,3 +77,42 @@ describe("OwnStockSnapshotRepository.replaceForDate", () => {
     expect(repo.countForDate("2026-04-18", "main")).toBe(0);
   });
 });
+
+describe("OwnStockSnapshotRepository.quantitiesByVendorLatest", () => {
+  let repo: OwnStockSnapshotRepository;
+
+  beforeEach(() => {
+    const db = openDatabase(":memory:");
+    repo = new OwnStockSnapshotRepository(db);
+  });
+
+  it("returns quantities from MAX(snapshot_date) for warehouse", () => {
+    repo.replaceForDate("2026-04-18", "main", [
+      mk({ vendorCode: "A", quantity: 5, snapshotDate: "2026-04-18" }),
+    ]);
+    repo.replaceForDate("2026-04-20", "main", [
+      mk({ vendorCode: "A", quantity: 99, snapshotDate: "2026-04-20" }),
+    ]);
+    const m = repo.quantitiesByVendorLatest("main");
+    expect(m.get("A")).toBe(99);
+  });
+
+  it("ignores older dates when a newer snapshot exists", () => {
+    repo.replaceForDate("2026-04-20", "main", [mk({ vendorCode: "A", quantity: 1 })]);
+    repo.replaceForDate("2026-04-18", "main", [mk({ vendorCode: "A", quantity: 500 })]);
+    expect(repo.quantitiesByVendorLatest("main").get("A")).toBe(1);
+  });
+
+  it("empty map when warehouse has no rows", () => {
+    expect([...repo.quantitiesByVendorLatest("main")]).toEqual([]);
+  });
+
+  it("is isolated per warehouse_code", () => {
+    repo.replaceForDate("2026-04-19", "main", [mk({ vendorCode: "A", quantity: 7 })]);
+    repo.replaceForDate("2026-04-20", "reserve", [
+      mk({ vendorCode: "A", quantity: 42, warehouseCode: "reserve" }),
+    ]);
+    expect(repo.quantitiesByVendorLatest("main").get("A")).toBe(7);
+    expect(repo.quantitiesByVendorLatest("reserve").get("A")).toBe(42);
+  });
+});

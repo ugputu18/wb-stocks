@@ -29,9 +29,11 @@ export interface ComputeRegionDemandSnapshotResult {
 }
 
 const WINDOW_SHORT_DAYS = 7;
-const WINDOW_LONG_DAYS = 30;
-const SHORT_WEIGHT = 0.6;
-const LONG_WEIGHT = 0.4;
+const WINDOW_MID_DAYS = 30;
+const WINDOW_LONG_DAYS = 90;
+const SHORT_WEIGHT = 0.5;
+const MID_WEIGHT = 0.3;
+const LONG_WEIGHT = 0.2;
 const EPSILON = 1e-6;
 const TREND_MIN = 0.75;
 const TREND_MAX = 1.25;
@@ -94,6 +96,7 @@ export function buildRegionDemandRecords(
   computedAt: string,
 ): WbRegionDemandSnapshotRecord[] {
   const cutoffShort = addDays(windowTo, -(WINDOW_SHORT_DAYS - 1));
+  const cutoffMid = addDays(windowTo, -(WINDOW_MID_DAYS - 1));
 
   type Bucket = {
     regionNameRaw: string | null;
@@ -104,6 +107,7 @@ export function buildRegionDemandRecords(
     barcode: string | null;
     units7: number;
     units30: number;
+    units90: number;
   };
   const buckets = new Map<string, Bucket>();
 
@@ -120,6 +124,7 @@ export function buildRegionDemandRecords(
         barcode: r.barcode,
         units7: 0,
         units30: 0,
+        units90: 0,
       };
       buckets.set(key, b);
     } else {
@@ -129,16 +134,22 @@ export function buildRegionDemandRecords(
       if (b.vendorCode === null && r.vendorCode !== null) b.vendorCode = r.vendorCode;
       if (b.barcode === null && r.barcode !== null) b.barcode = r.barcode;
     }
-    b.units30 += r.units;
+    b.units90 += r.units;
+    if (r.orderDate >= cutoffMid) b.units30 += r.units;
     if (r.orderDate >= cutoffShort) b.units7 += r.units;
   }
 
   const out: WbRegionDemandSnapshotRecord[] = [];
   for (const b of buckets.values()) {
     const avgDaily7 = b.units7 / WINDOW_SHORT_DAYS;
-    const avgDaily30 = b.units30 / WINDOW_LONG_DAYS;
+    const avgDaily30 = b.units30 / WINDOW_MID_DAYS;
+    const avgDaily90 = b.units90 / WINDOW_LONG_DAYS;
+    const effectiveAvg7 = firstNonZero(avgDaily7, avgDaily30, avgDaily90);
+    const effectiveAvg30 = firstNonZero(avgDaily30, avgDaily90);
     const baseDailyDemand =
-      SHORT_WEIGHT * avgDaily7 + LONG_WEIGHT * avgDaily30;
+      SHORT_WEIGHT * effectiveAvg7 +
+      MID_WEIGHT * effectiveAvg30 +
+      LONG_WEIGHT * avgDaily90;
     const trendRatio = avgDaily7 / Math.max(avgDaily30, EPSILON);
     const trendRatioClamped = clamp(trendRatio, TREND_MIN, TREND_MAX);
     const regionalForecastDailyDemand = baseDailyDemand * trendRatioClamped;
@@ -153,8 +164,10 @@ export function buildRegionDemandRecords(
       barcode: b.barcode,
       units7: b.units7,
       units30: b.units30,
+      units90: b.units90,
       avgDaily7,
       avgDaily30,
+      avgDaily90,
       baseDailyDemand,
       trendRatio,
       trendRatioClamped,
@@ -168,6 +181,13 @@ export function buildRegionDemandRecords(
     return a.techSize < b.techSize ? -1 : a.techSize > b.techSize ? 1 : 0;
   });
   return out;
+}
+
+function firstNonZero(...values: number[]): number {
+  for (const v of values) {
+    if (v > 0) return v;
+  }
+  return 0;
 }
 
 function clamp(x: number, lo: number, hi: number): number {

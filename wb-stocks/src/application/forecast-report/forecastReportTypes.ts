@@ -44,7 +44,10 @@ export interface ForecastReportFilter {
   replenishmentTargetCoverageDays?: number;
   /** Какой KPI суммарно подсвечивать в UI (оба значения всегда считаются). */
   replenishmentMode?: ReplenishmentMode | null;
-  /** Код нашего склада в `own_stock_snapshots` (default `main`). */
+  /**
+   * Код нашего склада в `own_stock_snapshots` (default `main`).
+   * Остатки own в отчёте берутся с **самой свежей** `snapshot_date` для этого кода, не с даты среза WB.
+   */
   ownWarehouseCode?: string | null;
   /** Lead time для плана заказа у поставщика (дней), query `leadTimeDays`. Default 45. */
   supplierLeadTimeDays?: number;

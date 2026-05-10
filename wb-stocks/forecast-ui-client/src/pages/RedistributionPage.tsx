@@ -52,6 +52,9 @@ export function RedistributionPage(): JSX.Element {
     warehouseStats,
     statsLoading,
     loadWarehouseStats,
+    refreshFromWb,
+    refreshFromWbLoading,
+    refreshFromWbError,
     donorSelectKeys,
     warehouseStatsAgeLabel,
   } = useRedistributionWarehouses(form, apiToken, donorKey, setDonorKey);
@@ -202,6 +205,9 @@ export function RedistributionPage(): JSX.Element {
         warehouseStats={warehouseStats}
         statsLoading={statsLoading}
         loadWarehouseStats={loadWarehouseStats}
+        refreshFromWb={refreshFromWb}
+        refreshFromWbLoading={refreshFromWbLoading}
+        refreshFromWbError={refreshFromWbError}
         warehouseStatsAgeLabel={warehouseStatsAgeLabel}
         warehouseKeys={warehouseKeys}
         reserveDaysStr={reserveDaysStr}

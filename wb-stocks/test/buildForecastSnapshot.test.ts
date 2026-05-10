@@ -54,8 +54,10 @@ function demand(
     barcode: "111",
     units7: 14,
     units30: 60,
+    units90: 180,
     avgDaily7: 2,
     avgDaily30: 2,
+    avgDaily90: 2,
     baseDailyDemand: 2,
     trendRatio: 1,
     trendRatioClamped: 1,
@@ -301,6 +303,7 @@ describe("buildForecastSnapshot", () => {
     // explainability inline:
     expect(row.units7).toBe(14);
     expect(row.units30).toBe(60);
+    expect(row.units90).toBe(180);
     expect(row.forecastDailyDemand).toBe(2);
     // and stock provenance:
     expect(row.stockSnapshotAt).toBe("2026-04-17T08:00:00.000Z");

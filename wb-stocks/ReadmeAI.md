@@ -776,13 +776,13 @@ pnpm typecheck       # tsc --noEmit
 Прогноз deliberately собран **поверх существующих снапшотов**, без новой
 отдельной интеграции WB:
 
-1. `importWbOrders` подтягивает orders за окно `snapshotDate - 30 ... snapshotDate - 1`
+1. `importWbOrders` подтягивает orders за окно `snapshotDate - 90 ... snapshotDate - 1`
    и сохраняет дневные агрегаты в `wb_orders_daily` и параллельно в **`wb_orders_daily_by_region`**
    (по `regionName`: ключ `region_key`, тот же net-of-cancel accounting).
 2. `computeDemandSnapshot` считает **fulfillment** demand baseline в `wb_demand_snapshots`
    (спрос по складу исполнения).
 2b. `computeRegionDemandSnapshot` считает **региональный** спрос в **`wb_region_demand_snapshots`**
-   (те же 7/30-дневные формулы; ключ `(region_key, nm_id, tech_size)`). Не подменяет шаг прогноза по складам.
+   (те же 7/30/90-дневные формулы; ключ `(region_key, nm_id, tech_size)`). Не подменяет шаг прогноза по складам.
 3. `buildForecastSnapshot` соединяет **только** fulfillment demand (`wb_demand_snapshots`) + pinned stock snapshot + incoming
    supplies и пишет `wb_forecast_snapshots`.
 4. `runSalesForecastMvp` — orchestration use case для CLI happy path (включает шаги 1–2b + 3).
@@ -798,6 +798,9 @@ pnpm typecheck       # tsc --noEmit
 Основные конвенции MVP:
 
 - Ключ спроса/прогноза: `(warehouse_key, nm_id, tech_size)`.
+- Спрос/день: `baseDailyDemand = 0.5*effectiveAvg7 + 0.3*effectiveAvg30 + 0.2*avgDaily90`,
+  где `effectiveAvg7 = firstNonZero(avgDaily7, avgDaily30, avgDaily90)`,
+  `effectiveAvg30 = firstNonZero(avgDaily30, avgDaily90)`; trend остаётся по сырым 7/30.
 - `vendor_code` и `barcode` — payload-only, для explainability и сверки.
 - Stock snapshot выбирается по UTC cutoff:
   последний `snapshot_at <= snapshotDateT23:59:59.999Z`.
@@ -843,4 +846,3 @@ pnpm typecheck       # tsc --noEmit
 - **Неизвестный `warehouse_key`** не попадает в execution targets; на каждый такой ключ ведётся in-memory статистика (`getUnknownWarehouseUsageStats`), предупреждение в консоли — один раз на ключ.
 
 Полные тексты: [`docs/redistribution-product.md`](./docs/redistribution-product.md), [`docs/redistribution-read-model.md`](./docs/redistribution-read-model.md).
-

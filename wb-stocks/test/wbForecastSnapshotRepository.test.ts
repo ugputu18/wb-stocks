@@ -15,8 +15,10 @@ function rec(over: Partial<WbForecastSnapshotRecord> = {}): WbForecastSnapshotRe
     barcode: "111",
     units7: 14,
     units30: 60,
+    units90: 180,
     avgDaily7: 2,
     avgDaily30: 2,
+    avgDaily90: 2,
     baseDailyDemand: 2,
     trendRatio: 1,
     trendRatioClamped: 1,
@@ -129,6 +131,7 @@ describe("WbForecastSnapshotRepository", () => {
       stockSnapshotAt: r.stockSnapshotAt,
       units7: 14,
       units30: 60,
+      units90: 180,
     });
   });
 

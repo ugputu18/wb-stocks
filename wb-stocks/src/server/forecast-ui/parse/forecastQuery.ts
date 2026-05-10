@@ -153,3 +153,61 @@ export function parseRowsLimit(url: URL): number {
   if (!Number.isInteger(n) || n < ROWS_LIMIT_MIN) return ROWS_LIMIT_DEFAULT;
   return Math.min(n, ROWS_LIMIT_MAX);
 }
+
+export interface RegionalStocksQuery {
+  ok: true;
+  snapshotDate: string;
+  horizonDays: number;
+  macroRegion: string;
+  targetCoverageDays: number;
+  riskStockout: RiskStockoutFilter;
+  q: string | null;
+  limit: number;
+}
+
+export interface RegionalStocksQueryError {
+  ok: false;
+  error: string;
+}
+
+const REGIONAL_STOCKS_ALLOWED_TARGET_COVERAGE = new Set([30, 42, 60]);
+
+export function parseRegionalStocksQuery(
+  url: URL,
+): RegionalStocksQuery | RegionalStocksQueryError {
+  const snapshotDate = url.searchParams.get("snapshotDate")?.trim() ?? "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(snapshotDate)) {
+    return { ok: false, error: "snapshotDate (YYYY-MM-DD) required" };
+  }
+
+  const horizonDays = Number(url.searchParams.get("horizonDays"));
+  if (!Number.isInteger(horizonDays) || ![5, 10, 20].includes(horizonDays)) {
+    return { ok: false, error: "horizonDays (5|10|20) required" };
+  }
+
+  const macroRegion = url.searchParams.get("macroRegion")?.trim() ?? "";
+  if (macroRegion === "") {
+    return { ok: false, error: "macroRegion required" };
+  }
+
+  const targetRaw = url.searchParams.get("targetCoverageDays");
+  const targetCoverageDays =
+    targetRaw === null || targetRaw.trim() === "" ? 42 : Number(targetRaw);
+  if (
+    !Number.isInteger(targetCoverageDays) ||
+    !REGIONAL_STOCKS_ALLOWED_TARGET_COVERAGE.has(targetCoverageDays)
+  ) {
+    return { ok: false, error: "targetCoverageDays (30|42|60) required" };
+  }
+
+  return {
+    ok: true,
+    snapshotDate,
+    horizonDays,
+    macroRegion,
+    targetCoverageDays,
+    riskStockout: parseRiskStockout(url.searchParams.get("riskStockout")),
+    q: url.searchParams.get("q")?.trim() || null,
+    limit: parseRowsLimit(url),
+  };
+}

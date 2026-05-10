@@ -3,13 +3,13 @@
  *
  * The snapshot is the per-`(warehouse, sku)` demand profile as of
  * `snapshotDate`, computed from `wb_orders_daily` over the trailing
- * 30 days. It is the input to the forecast simulation (Stage 3).
+ * 90 days. It is the input to the forecast simulation (Stage 3).
  *
  * Numeric fields:
- * - `units7` / `units30`        — raw sums in pieces
- * - `avgDaily7` / `avgDaily30`  — smoothed daily rates (pieces/day)
- * - `baseDailyDemand`           — `0.6*avgDaily7 + 0.4*avgDaily30`
- * - `trendRatio`                — `avgDaily7 / max(avgDaily30, ε)`
+ * - `units7` / `units30` / `units90`       — raw sums in pieces
+ * - `avgDaily7` / `avgDaily30` / `avgDaily90` — daily rates (pieces/day)
+ * - `baseDailyDemand`           — weighted effective 7/30/90 demand
+ * - `trendRatio`                — raw `avgDaily7 / max(avgDaily30, ε)`
  * - `trendRatioClamped`         — `clamp(trendRatio, 0.75, 1.25)`
  * - `forecastDailyDemand`       — `baseDailyDemand * trendRatioClamped`
  *
@@ -26,8 +26,10 @@ export interface WbDemandSnapshotRecord {
   barcode: string | null;
   units7: number;
   units30: number;
+  units90: number;
   avgDaily7: number;
   avgDaily30: number;
+  avgDaily90: number;
   baseDailyDemand: number;
   trendRatio: number;
   trendRatioClamped: number;

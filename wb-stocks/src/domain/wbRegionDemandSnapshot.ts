@@ -12,8 +12,10 @@ export interface WbRegionDemandSnapshotRecord {
   barcode: string | null;
   units7: number;
   units30: number;
+  units90: number;
   avgDaily7: number;
   avgDaily30: number;
+  avgDaily90: number;
   baseDailyDemand: number;
   trendRatio: number;
   trendRatioClamped: number;

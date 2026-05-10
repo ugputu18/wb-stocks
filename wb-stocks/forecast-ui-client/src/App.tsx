@@ -92,6 +92,8 @@ export function App() {
         <h1>WB sales forecast</h1>
         <p class="muted">
           Summary + основная таблица + закупка.{" "}
+          <a href={FORECAST_UI_SPA_ROUTES.regionalStocks}>Запасы по региону WB</a>
+          {" · "}
           <a href={FORECAST_UI_SPA_ROUTES.redistribution}>Перемещение между складами WB</a>
           {" · "}
           <a href={FORECAST_UI_SPA_ROUTES.regionalDemandDiagnostics}>Регион vs fulfillment</a>

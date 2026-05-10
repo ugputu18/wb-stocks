@@ -25,7 +25,7 @@ export interface ComputeDemandSnapshotOptions {
 
 export interface ComputeDemandSnapshotResult {
   snapshotDate: string;
-  windowFrom: string; // YYYY-MM-DD, inclusive (= snapshotDate − 30)
+  windowFrom: string; // YYYY-MM-DD, inclusive (= snapshotDate − 90)
   windowTo: string;   // YYYY-MM-DD, inclusive (= snapshotDate − 1)
   ordersRows: number;
   demandRows: number;
@@ -37,22 +37,24 @@ export interface ComputeDemandSnapshotResult {
 
 /** Window sizes are part of the model (Stage 2 spec). */
 const WINDOW_SHORT_DAYS = 7;
-const WINDOW_LONG_DAYS = 30;
+const WINDOW_MID_DAYS = 30;
+const WINDOW_LONG_DAYS = 90;
 
 /**
  * Smoothing parameters from the task spec. `EPSILON` keeps the
  * `trendRatio` finite when long-window demand is zero. The clamp is
  * intentionally tight to avoid runaway forecasts on tiny absolute values.
  */
-const SHORT_WEIGHT = 0.6;
-const LONG_WEIGHT = 0.4;
+const SHORT_WEIGHT = 0.5;
+const MID_WEIGHT = 0.3;
+const LONG_WEIGHT = 0.2;
 const EPSILON = 1e-6;
 const TREND_MIN = 0.75;
 const TREND_MAX = 1.25;
 
 /**
  * Use case: build the demand snapshot for `snapshotDate` from
- * `wb_orders_daily` over the trailing 30 days.
+ * `wb_orders_daily` over the trailing 90 days.
  *
  * Idempotency: full replace-by-date in `wb_demand_snapshots`.
  * If you re-run for the same `snapshotDate` after re-importing orders,
@@ -114,7 +116,7 @@ export async function computeDemandSnapshot(
  * snapshot records. Exposed for unit tests.
  *
  * `windowTo` MUST equal `snapshotDate − 1` (the inclusive last day of
- * the input window). The 7-day cutoff is derived from it.
+ * the input window). The 7/30-day cutoffs are derived from it.
  */
 export function buildDemandRecords(
   rows: readonly WbOrdersDailyRecord[],
@@ -123,6 +125,7 @@ export function buildDemandRecords(
   computedAt: string,
 ): WbDemandSnapshotRecord[] {
   const cutoffShort = addDays(windowTo, -(WINDOW_SHORT_DAYS - 1));
+  const cutoffMid = addDays(windowTo, -(WINDOW_MID_DAYS - 1));
 
   type Bucket = {
     warehouseNameRaw: string | null;
@@ -133,6 +136,7 @@ export function buildDemandRecords(
     barcode: string | null;
     units7: number;
     units30: number;
+    units90: number;
   };
   const buckets = new Map<string, Bucket>();
 
@@ -149,6 +153,7 @@ export function buildDemandRecords(
         barcode: r.barcode,
         units7: 0,
         units30: 0,
+        units90: 0,
       };
       buckets.set(key, b);
     } else {
@@ -162,16 +167,22 @@ export function buildDemandRecords(
         b.barcode = r.barcode;
       }
     }
-    b.units30 += r.units;
+    b.units90 += r.units;
+    if (r.orderDate >= cutoffMid) b.units30 += r.units;
     if (r.orderDate >= cutoffShort) b.units7 += r.units;
   }
 
   const out: WbDemandSnapshotRecord[] = [];
   for (const b of buckets.values()) {
     const avgDaily7 = b.units7 / WINDOW_SHORT_DAYS;
-    const avgDaily30 = b.units30 / WINDOW_LONG_DAYS;
+    const avgDaily30 = b.units30 / WINDOW_MID_DAYS;
+    const avgDaily90 = b.units90 / WINDOW_LONG_DAYS;
+    const effectiveAvg7 = firstNonZero(avgDaily7, avgDaily30, avgDaily90);
+    const effectiveAvg30 = firstNonZero(avgDaily30, avgDaily90);
     const baseDailyDemand =
-      SHORT_WEIGHT * avgDaily7 + LONG_WEIGHT * avgDaily30;
+      SHORT_WEIGHT * effectiveAvg7 +
+      MID_WEIGHT * effectiveAvg30 +
+      LONG_WEIGHT * avgDaily90;
     const trendRatio = avgDaily7 / Math.max(avgDaily30, EPSILON);
     const trendRatioClamped = clamp(trendRatio, TREND_MIN, TREND_MAX);
     const forecastDailyDemand = baseDailyDemand * trendRatioClamped;
@@ -186,8 +197,10 @@ export function buildDemandRecords(
       barcode: b.barcode,
       units7: b.units7,
       units30: b.units30,
+      units90: b.units90,
       avgDaily7,
       avgDaily30,
+      avgDaily90,
       baseDailyDemand,
       trendRatio,
       trendRatioClamped,
@@ -202,6 +215,13 @@ export function buildDemandRecords(
     return a.techSize < b.techSize ? -1 : a.techSize > b.techSize ? 1 : 0;
   });
   return out;
+}
+
+function firstNonZero(...values: number[]): number {
+  for (const v of values) {
+    if (v > 0) return v;
+  }
+  return 0;
 }
 
 function clamp(x: number, lo: number, hi: number): number {

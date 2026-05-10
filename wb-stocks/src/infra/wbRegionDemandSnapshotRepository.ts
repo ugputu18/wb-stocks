@@ -18,12 +18,12 @@ export class WbRegionDemandSnapshotRepository {
     const ins = this.db.prepare(
       `INSERT INTO wb_region_demand_snapshots (
          snapshot_date, region_name_raw, region_key, nm_id, tech_size,
-         vendor_code, barcode, units7, units30, avg_daily_7, avg_daily_30,
+         vendor_code, barcode, units7, units30, units90, avg_daily_7, avg_daily_30, avg_daily_90,
          base_daily_demand, trend_ratio, trend_ratio_clamped,
          regional_forecast_daily_demand, computed_at
        ) VALUES (
          @snapshotDate, @regionNameRaw, @regionKey, @nmId, @techSize,
-         @vendorCode, @barcode, @units7, @units30, @avgDaily7, @avgDaily30,
+         @vendorCode, @barcode, @units7, @units30, @units90, @avgDaily7, @avgDaily30, @avgDaily90,
          @baseDailyDemand, @trendRatio, @trendRatioClamped,
          @regionalForecastDailyDemand, @computedAt
        )`,
@@ -55,8 +55,10 @@ export class WbRegionDemandSnapshotRepository {
                 barcode               AS barcode,
                 units7                AS units7,
                 units30               AS units30,
+                units90               AS units90,
                 avg_daily_7           AS avgDaily7,
                 avg_daily_30          AS avgDaily30,
+                avg_daily_90          AS avgDaily90,
                 base_daily_demand     AS baseDailyDemand,
                 trend_ratio           AS trendRatio,
                 trend_ratio_clamped   AS trendRatioClamped,
@@ -98,8 +100,10 @@ export class WbRegionDemandSnapshotRepository {
                 barcode               AS barcode,
                 units7                AS units7,
                 units30               AS units30,
+                units90               AS units90,
                 avg_daily_7           AS avgDaily7,
                 avg_daily_30          AS avgDaily30,
+                avg_daily_90          AS avgDaily90,
                 base_daily_demand     AS baseDailyDemand,
                 trend_ratio           AS trendRatio,
                 trend_ratio_clamped   AS trendRatioClamped,
@@ -161,8 +165,10 @@ export class WbRegionDemandSnapshotRepository {
                         barcode               AS barcode,
                         units7                AS units7,
                         units30               AS units30,
+                        units90               AS units90,
                         avg_daily_7           AS avgDaily7,
                         avg_daily_30          AS avgDaily30,
+                        avg_daily_90          AS avgDaily90,
                         base_daily_demand     AS baseDailyDemand,
                         trend_ratio           AS trendRatio,
                         trend_ratio_clamped   AS trendRatioClamped,

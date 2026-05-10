@@ -136,8 +136,10 @@ const MIGRATIONS: readonly string[] = [
      barcode                TEXT,
      units7                 INTEGER NOT NULL,
      units30                INTEGER NOT NULL,
+     units90                INTEGER NOT NULL DEFAULT 0,
      avg_daily_7            REAL    NOT NULL,
      avg_daily_30           REAL    NOT NULL,
+     avg_daily_90           REAL    NOT NULL DEFAULT 0,
      base_daily_demand      REAL    NOT NULL,
      trend_ratio            REAL    NOT NULL,
      trend_ratio_clamped    REAL    NOT NULL,
@@ -164,8 +166,10 @@ const MIGRATIONS: readonly string[] = [
      barcode                TEXT,
      units7                 INTEGER NOT NULL,
      units30                INTEGER NOT NULL,
+     units90                INTEGER NOT NULL DEFAULT 0,
      avg_daily_7            REAL    NOT NULL,
      avg_daily_30           REAL    NOT NULL,
+     avg_daily_90           REAL    NOT NULL DEFAULT 0,
      base_daily_demand      REAL    NOT NULL,
      trend_ratio            REAL    NOT NULL,
      trend_ratio_clamped    REAL    NOT NULL,
@@ -223,8 +227,10 @@ const MIGRATIONS: readonly string[] = [
      barcode                TEXT,
      units7                 INTEGER NOT NULL,
      units30                INTEGER NOT NULL,
+     units90                INTEGER NOT NULL DEFAULT 0,
      avg_daily_7            REAL    NOT NULL,
      avg_daily_30           REAL    NOT NULL,
+     avg_daily_90           REAL    NOT NULL DEFAULT 0,
      base_daily_demand      REAL    NOT NULL,
      trend_ratio            REAL    NOT NULL,
      trend_ratio_clamped    REAL    NOT NULL,
@@ -251,8 +257,30 @@ export function openDatabase(path: string): DbHandle {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   runMigrations(db);
+  migrateDemandWindowColumns(db);
   migrateRegionDemandSnapshotColumn(db);
   return db;
+}
+
+/** Старые БД: добавляем 90-дневные поля спроса без backfill исторических срезов. */
+function migrateDemandWindowColumns(db: DbHandle): void {
+  ensureColumn(db, "wb_demand_snapshots", "units90", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "wb_demand_snapshots", "avg_daily_90", "REAL NOT NULL DEFAULT 0");
+  ensureColumn(db, "wb_forecast_snapshots", "units90", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "wb_forecast_snapshots", "avg_daily_90", "REAL NOT NULL DEFAULT 0");
+  ensureColumn(db, "wb_region_demand_snapshots", "units90", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "wb_region_demand_snapshots", "avg_daily_90", "REAL NOT NULL DEFAULT 0");
+}
+
+function ensureColumn(
+  db: DbHandle,
+  table: string,
+  column: string,
+  definition: string,
+): void {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (rows.some((r) => r.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
 /** Старые БД: колонка `forecast_daily_demand` → `regional_forecast_daily_demand`. */

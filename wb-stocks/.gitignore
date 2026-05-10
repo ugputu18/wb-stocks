@@ -8,7 +8,7 @@ data/*.sqlite-shm
 data/*.sqlite-wal
 coverage
 .DS_Store
-
+public/forecast-ui-next
 
 
 ## Panda

@@ -56,9 +56,12 @@ pnpm forecast:sales-mvp --date=2026-04-17 --horizons=30,60 --dry-run
 pnpm forecast:sales-mvp --sku=SKU-1 --warehouse=Коледино
 
 # Semantics:
-# - Imports WB orders for [snapshotDate-30 .. snapshotDate-1], then recomputes demand for snapshotDate, then forecast per horizon.
+# - Pulls a fresh WB stocks snapshot first (importWbStocks), so forecast pinning sees current quantities.
+# - Imports WB orders for [snapshotDate-90 .. snapshotDate-1], then recomputes demand for snapshotDate, then forecast per horizon.
 # - --sku / --warehouse only scope the forecast DB write (wb_forecast_snapshots), not orders or demand.
 # - Stock snapshot for forecast uses UTC cutoff (last wb_stock_snapshots.snapshot_at <= snapshotDate end-of-day UTC); see ReadmeAI §12.
+# - The same pipeline backs `POST /api/forecast/recalculate` and the redistribution UI button «Обновить данные WB»;
+#   pass `{ "refreshStocks": false }` in the body to skip the stocks call (e.g. for offline runs).
 
 pnpm test                               # run the test suite
 ```
@@ -105,6 +108,12 @@ Trailing `warn` lines like
 
 ## Troubleshooting
 
+- `better_sqlite3.node` / `NODE_MODULE_VERSION` mismatch (e.g. compiled for
+  **115** but Node expects **127**) — native addon was built for another Node
+  major. After `nvm use` (or any Node version switch), run:
+  `pnpm rebuild:native` (alias for `pnpm rebuild better-sqlite3`). Repeat
+  whenever you change Node or reinstall deps from a machine that used a
+  different version.
 - `node: bad option: --env-file=.env` — your shell is on Node < 20.6.
   Run `nvm use` inside `wb-stocks/` (the `.nvmrc` pins Node 22). The pnpm
   scripts rely on Node's built-in `--env-file` flag, there is no `dotenv`.

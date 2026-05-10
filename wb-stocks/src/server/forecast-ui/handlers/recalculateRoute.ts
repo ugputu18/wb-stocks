@@ -61,6 +61,8 @@ export function createRecalculateRoute(ctx: ForecastUiServerCtx): ForecastRouteM
         typeof body.warehouse === "string" && body.warehouse.trim() !== ""
           ? body.warehouse.trim()
           : undefined;
+      const refreshStocks =
+        typeof body.refreshStocks === "boolean" ? body.refreshStocks : true;
 
       const result = await runSalesForecastMvp(buildMvpDeps(ctx), {
         snapshotDate,
@@ -68,6 +70,7 @@ export function createRecalculateRoute(ctx: ForecastUiServerCtx): ForecastRouteM
         dryRun,
         sku,
         warehouse,
+        refreshStocks,
       });
 
       json(res, 200, {

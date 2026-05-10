@@ -116,8 +116,10 @@ export function createDiagnosticsRoutes(deps: ForecastUiHandlerDeps): ForecastRo
             regionalForecastDailyDemand: r.regionalForecastDailyDemand,
             units7: r.units7,
             units30: r.units30,
+            units90: r.units90,
             avgDaily7: r.avgDaily7,
             avgDaily30: r.avgDaily30,
+            avgDaily90: r.avgDaily90,
           })),
         });
       },

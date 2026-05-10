@@ -21,6 +21,9 @@ export type RedistributionControlsSectionProps = {
   warehouseStats: Map<string, WarehouseOptionStats>;
   statsLoading: boolean;
   loadWarehouseStats: () => void | Promise<void>;
+  refreshFromWb: () => void | Promise<void>;
+  refreshFromWbLoading: boolean;
+  refreshFromWbError: string | null;
   warehouseStatsAgeLabel: string | null;
   warehouseKeys: string[];
   reserveDaysStr: string;
@@ -47,6 +50,9 @@ export function RedistributionControlsSection(props: RedistributionControlsSecti
     warehouseStats,
     statsLoading,
     loadWarehouseStats,
+    refreshFromWb,
+    refreshFromWbLoading,
+    refreshFromWbError,
     warehouseStatsAgeLabel,
     warehouseKeys,
     reserveDaysStr,
@@ -215,7 +221,7 @@ export function RedistributionControlsSection(props: RedistributionControlsSecti
           {loading ? "Считаем…" : "Подобрать перемещения"}
         </button>
         <span class="redistribution-wb-refresh">
-          {warehouseStatsAgeLabel && !statsLoading ? (
+          {warehouseStatsAgeLabel && !statsLoading && !refreshFromWbLoading ? (
             <span
               class="muted redistribution-wb-refresh-meta"
               title="Момент последнего ответа сервера по суммам Σ local в списке складов (ваши часы). Данные среза — по дате в поле «Дата среза»."
@@ -227,18 +233,32 @@ export function RedistributionControlsSection(props: RedistributionControlsSecti
           <button
             type="button"
             class="btn-load"
-            disabled={statsLoading || warehouseKeys.length === 0}
+            disabled={refreshFromWbLoading || statsLoading || warehouseKeys.length === 0}
             title={WB_WAREHOUSE_STATS_BUTTON_TITLE}
-            onClick={() => void loadWarehouseStats()}
+            onClick={() => void refreshFromWb()}
           >
-            {statsLoading ? "Обновление данных…" : "Обновить данные WB"}
+            {refreshFromWbLoading
+              ? "Обновляем по WB…"
+              : statsLoading
+                ? "Обновление данных…"
+                : "Обновить данные WB"}
           </button>
         </span>
       </div>
-      {statsLoading ? (
+      {refreshFromWbLoading ? (
+        <p class="muted redistribution-stats-hint" aria-live="polite">
+          Тянем с Wildberries свежие остатки по складам и заказы за окно спроса (~30 дней),
+          пересчитываем прогноз и обновляем суммы по складам. Это займёт несколько секунд.
+        </p>
+      ) : statsLoading ? (
         <p class="muted redistribution-stats-hint" aria-live="polite">
           Загружаем строки прогноза по складам с сервера (суммы Σ local в выпадающем списке). На расчёт
           «Подобрать перемещения» не блокируем.
+        </p>
+      ) : null}
+      {refreshFromWbError ? (
+        <p class="forecast-next-error redistribution-stats-hint" role="alert">
+          Не удалось обновить данные WB: {refreshFromWbError}
         </p>
       ) : null}
     </Panel>

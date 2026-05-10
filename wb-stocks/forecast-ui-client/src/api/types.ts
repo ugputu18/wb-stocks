@@ -54,6 +54,37 @@ export interface WarehouseKeysResponse {
   warehouseKeys: string[];
 }
 
+export interface RegionalStocksResponse {
+  snapshotDate: string;
+  horizonDays: number;
+  macroRegion: string;
+  targetCoverageDays: number;
+  summary: {
+    totalRows: number;
+    risk: {
+      critical: number;
+      warning: number;
+      attention: number;
+      ok: number;
+    };
+    recommendedToRegionTotal: number;
+  };
+  rows: Array<{
+    nmId: number;
+    techSize: string;
+    vendorCode: string | null;
+    risk: "critical" | "warning" | "attention" | "ok";
+    regionalStartStock: number;
+    regionalIncomingUnits: number;
+    regionalAvailable: number;
+    regionalForecastDailyDemand: number;
+    daysOfStockRegional: number;
+    stockoutDateEstimate: string | null;
+    recommendedToRegion: number;
+    stockSnapshotAtMin: string | null;
+  }>;
+}
+
 /** POST /api/forecast/regional-demand — снимок спроса по регионам заказа + явный mapping регион заказа → регион (кластер). */
 export interface RegionalDemandResponse {
   snapshotDate?: string;
@@ -63,6 +94,12 @@ export interface RegionalDemandResponse {
     nmId: number;
     techSize: string;
     regionalForecastDailyDemand: number;
+    units7?: number;
+    units30?: number;
+    units90?: number;
+    avgDaily7?: number;
+    avgDaily30?: number;
+    avgDaily90?: number;
   }>;
   regionMacroMap?: Record<string, string>;
 }

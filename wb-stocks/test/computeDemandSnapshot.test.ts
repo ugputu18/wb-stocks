@@ -42,32 +42,69 @@ function order(
   };
 }
 
+function addDays(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split("-").map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d) + days * 24 * 60 * 60 * 1000);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+}
+
 describe("buildDemandRecords (pure aggregation)", () => {
-  // snapshotDate = 2026-04-17, windowTo = 2026-04-16, windowFrom = 2026-03-18.
+  // snapshotDate = 2026-04-17, windowTo = 2026-04-16, windowFrom = 2026-01-17.
   // Last 7 days: 2026-04-10 .. 2026-04-16 inclusive.
   const SNAP = "2026-04-17";
   const TO = "2026-04-16";
 
-  it("computes units7/units30 and base demand from a flat 30-day stream", () => {
-    // 1 unit/day for 30 days.
+  it("computes units7/units30/units90 and base demand from a flat 90-day stream", () => {
+    // 1 unit/day for 90 days.
     const rows: WbOrdersDailyRecord[] = [];
-    for (let i = 0; i < 30; i += 1) {
-      const d = `2026-${i < 14 ? "03" : "04"}-${String(
-        i < 14 ? 18 + i : i - 13,
-      ).padStart(2, "0")}`;
-      rows.push(order(d, 1));
+    for (let i = 89; i >= 0; i -= 1) {
+      rows.push(order(addDays(TO, -i), 1));
     }
     const out = buildDemandRecords(rows, SNAP, TO, "now");
     expect(out).toHaveLength(1);
     const r = out[0]!;
+    expect(r.units90).toBe(90);
     expect(r.units30).toBe(30);
     expect(r.units7).toBe(7);
     expect(r.avgDaily7).toBeCloseTo(1, 10);
     expect(r.avgDaily30).toBeCloseTo(1, 10);
+    expect(r.avgDaily90).toBeCloseTo(1, 10);
     expect(r.baseDailyDemand).toBeCloseTo(1, 10);
     expect(r.trendRatio).toBeCloseTo(1, 10);
     expect(r.trendRatioClamped).toBe(1);
     expect(r.forecastDailyDemand).toBeCloseTo(1, 10);
+  });
+
+  it("falls back from zero avgDaily7 to avgDaily30 in base demand", () => {
+    const rows: WbOrdersDailyRecord[] = [];
+    for (let day = 1; day <= 9; day += 1) {
+      rows.push(order(`2026-04-${String(day).padStart(2, "0")}`, 3));
+    }
+    const out = buildDemandRecords(rows, SNAP, TO, "now");
+    const r = out[0]!;
+    expect(r.units7).toBe(0);
+    expect(r.units30).toBe(27);
+    expect(r.units90).toBe(27);
+    expect(r.avgDaily30).toBeCloseTo(0.9, 10);
+    expect(r.avgDaily90).toBeCloseTo(0.3, 10);
+    expect(r.baseDailyDemand).toBeCloseTo(0.5 * 0.9 + 0.3 * 0.9 + 0.2 * 0.3, 10);
+    expect(r.trendRatioClamped).toBe(0.75);
+  });
+
+  it("falls back from zero avgDaily7/30 to avgDaily90 in base demand", () => {
+    const rows: WbOrdersDailyRecord[] = [];
+    for (let i = 89; i >= 30; i -= 1) {
+      rows.push(order(addDays(TO, -i), 1));
+    }
+    const out = buildDemandRecords(rows, SNAP, TO, "now");
+    const r = out[0]!;
+    expect(r.units7).toBe(0);
+    expect(r.units30).toBe(0);
+    expect(r.units90).toBe(60);
+    expect(r.avgDaily90).toBeCloseTo(60 / 90, 10);
+    expect(r.baseDailyDemand).toBeCloseTo(60 / 90, 10);
+    expect(r.trendRatioClamped).toBe(0.75);
+    expect(r.forecastDailyDemand).toBeCloseTo((60 / 90) * 0.75, 10);
   });
 
   it("clamps trendRatio upward to 1.25 when last week explodes", () => {
@@ -149,7 +186,7 @@ describe("computeDemandSnapshot use case", () => {
     demandRepo = new WbDemandSnapshotRepository(db);
   });
 
-  it("reads orders for [snapshotDate-30, snapshotDate-1] only, then writes snapshot", async () => {
+  it("reads orders for [snapshotDate-90, snapshotDate-1] only, then writes snapshot", async () => {
     // Inside the window:
     ordersRepo.replaceDay("2026-04-15", [order("2026-04-15", 4)]);
     ordersRepo.replaceDay("2026-04-16", [order("2026-04-16", 6)]);
@@ -166,7 +203,7 @@ describe("computeDemandSnapshot use case", () => {
       { snapshotDate: "2026-04-17" },
     );
 
-    expect(r.windowFrom).toBe("2026-03-18");
+    expect(r.windowFrom).toBe("2026-01-17");
     expect(r.windowTo).toBe("2026-04-16");
     expect(r.demandRows).toBe(1);
     expect(r.rowsInserted).toBe(1);
@@ -174,6 +211,7 @@ describe("computeDemandSnapshot use case", () => {
     const persisted = demandRepo.getForDate("2026-04-17")[0]!;
     expect(persisted.units7).toBe(10);
     expect(persisted.units30).toBe(10);
+    expect(persisted.units90).toBe(10);
   });
 
   it("re-running for the same snapshotDate replaces, never duplicates", async () => {
@@ -235,8 +273,10 @@ describe("computeDemandSnapshot use case", () => {
         barcode: null,
         units7: 0,
         units30: 0,
+        units90: 0,
         avgDaily7: 0,
         avgDaily30: 0,
+        avgDaily90: 0,
         baseDailyDemand: 0,
         trendRatio: 0,
         trendRatioClamped: 0.75,

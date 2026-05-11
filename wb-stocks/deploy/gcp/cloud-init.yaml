@@ -47,7 +47,7 @@ write_files:
       APP_DIR=/srv/wb-stocks/app
       DATA_DIR=/srv/wb-stocks/data
       ENV_FILE=/etc/wb-stocks.env
-      DEPLOY_DIR="${APP_DIR}/deploy/gcp"
+      DEPLOY_DIR="${APP_DIR}/wb-stocks/deploy/gcp"
       NODE_MAJOR=22
 
       # ----- 1. Packages -------------------------------------------------------

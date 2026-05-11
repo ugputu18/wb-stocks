@@ -69,3 +69,40 @@ export function formatWarehouseRegionFirst(
   const regionShown = region ?? UNMAPPED_WAREHOUSE_REGION_LABEL;
   return `${regionShown} (${name})`;
 }
+
+export interface MacroRegionWarehouseInfo {
+  warehouseKey: string;
+  displayName: string;
+  isSortingCenter: boolean;
+}
+
+/**
+ * Склады, которые относятся к данному макрорегиону и реально участвуют
+ * в агрегации «Доступно в регионе» на странице «Запасы WB по региону».
+ *
+ * Фильтр совпадает с `warehouseContributesToRegionalAvailabilityStock`
+ * в `wb-stocks/src/domain/wbWarehouseRegistry.ts`: исключаются виртуальные
+ * склады, СЦ остаются (их остаток учитывается отчётом наравне с обычными
+ * FBO-складами). Сортировка по `displayName` в русской локали.
+ *
+ * Возвращаемое значение умышленно компактно — это справочный список под
+ * селектором региона, а не полный snapshot из реестра.
+ */
+export function listLiveWarehousesForMacroRegion(
+  macroRegion: string,
+): MacroRegionWarehouseInfo[] {
+  const target = macroRegion.trim();
+  if (!target) return [];
+  const out: MacroRegionWarehouseInfo[] = [];
+  for (const entry of Object.values(WB_WAREHOUSE_REGISTRY)) {
+    if (entry.macroRegion !== target) continue;
+    if (entry.isVirtual) continue;
+    out.push({
+      warehouseKey: entry.warehouseKey,
+      displayName: entry.displayName,
+      isSortingCenter: entry.isSortingCenter,
+    });
+  }
+  out.sort((a, b) => a.displayName.localeCompare(b.displayName, "ru"));
+  return out;
+}

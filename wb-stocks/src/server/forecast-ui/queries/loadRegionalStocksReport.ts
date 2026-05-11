@@ -60,6 +60,24 @@ export function findBaseForecastHorizon(
   return row?.horizonDays ?? null;
 }
 
+/**
+ * Самый свежий snapshot_date среди базовых горизонтов прогноза. Использует
+ * тот же пул горизонтов (30/60/90), что и `findBaseForecastHorizon`, чтобы
+ * "последний срез" гарантированно прошёл следующий шаг и не привёл к 404 из-за
+ * того, что для самой свежей даты есть только нестандартный горизонт.
+ */
+export function resolveLatestForecastSnapshotDate(db: DbHandle): string | null {
+  const row = db
+    .prepare(
+      `SELECT MAX(snapshot_date) AS d
+         FROM wb_forecast_snapshots
+        WHERE horizon_days IN (30, 60, 90)`,
+    )
+    .get() as { d: string | null } | undefined;
+  const d = row?.d?.trim();
+  return d && d.length > 0 ? d : null;
+}
+
 export interface RegionalStocksLoadDeps {
   db: DbHandle;
   logger: Logger;
@@ -73,12 +91,26 @@ export type LoadRegionalStocksOutcome =
  * Build the regional-stocks report end-to-end (DB → application) for a parsed
  * query. Returns a 404-ish envelope when the snapshot is missing so callers
  * can decide whether to render JSON or a CSV error response.
+ *
+ * `q.snapshotDate === null` означает "оператор не задал дату" — берём самый
+ * свежий срез автоматически (см. `resolveLatestForecastSnapshotDate`).
  */
 export function loadRegionalStocksReport(
   deps: RegionalStocksLoadDeps,
   q: RegionalStocksQuery,
 ): LoadRegionalStocksOutcome {
-  const baseForecastHorizon = findBaseForecastHorizon(deps.db, q.snapshotDate);
+  const snapshotDate =
+    q.snapshotDate ?? resolveLatestForecastSnapshotDate(deps.db);
+  if (snapshotDate === null) {
+    return {
+      ok: false,
+      status: 404,
+      error:
+        "No forecast snapshots found in DB (run sales forecast MVP first)",
+    };
+  }
+
+  const baseForecastHorizon = findBaseForecastHorizon(deps.db, snapshotDate);
   if (baseForecastHorizon === null) {
     return {
       ok: false,
@@ -96,8 +128,8 @@ export function loadRegionalStocksReport(
   const incoming = selectIncomingSupplies({
     supplies,
     itemsBySupplyId: groupSupplyItemsBySupplyId(items),
-    fromDate: q.snapshotDate,
-    toDate: addDaysYmd(q.snapshotDate, q.horizonDays - 1),
+    fromDate: snapshotDate,
+    toDate: addDaysYmd(snapshotDate, q.horizonDays - 1),
     logger: deps.logger,
   }).incoming;
   const incomingUnitsByKey = new Map<string, number>();
@@ -120,7 +152,7 @@ export function loadRegionalStocksReport(
         WHERE snapshot_date = ? AND horizon_days = ?
         GROUP BY warehouse_key, nm_id, tech_size`,
     )
-    .all(q.snapshotDate, baseForecastHorizon) as Array<{
+    .all(snapshotDate, baseForecastHorizon) as Array<{
     warehouseKey: string;
     nmId: number;
     techSize: string;
@@ -164,7 +196,7 @@ export function loadRegionalStocksReport(
         WHERE snapshot_date = ?
         GROUP BY region_key, nm_id, tech_size`,
     )
-    .all(q.snapshotDate) as Array<{
+    .all(snapshotDate) as Array<{
     regionKey: string;
     nmId: number;
     techSize: string;
@@ -178,7 +210,7 @@ export function loadRegionalStocksReport(
   ).quantitiesByVendorLatest(q.ownWarehouseCode);
 
   const report = buildRegionalStocksReport({
-    snapshotDate: q.snapshotDate,
+    snapshotDate,
     horizonDays: q.horizonDays,
     macroRegion: q.macroRegion,
     targetCoverageDays: q.targetCoverageDays,

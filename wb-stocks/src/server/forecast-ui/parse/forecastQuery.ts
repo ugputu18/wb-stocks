@@ -156,7 +156,14 @@ export function parseRowsLimit(url: URL): number {
 
 export interface RegionalStocksQuery {
   ok: true;
-  snapshotDate: string;
+  /**
+   * `null` — оператор не задал дату; загрузчик отчёта обязан резолвить
+   * `MAX(snapshot_date)` среди базовых горизонтов (см.
+   * `loadRegionalStocksReport`). Используется страницей «Запасы WB по
+   * региону», которая принципиально не показывает «дату среза» как поле
+   * ввода — она работает только с самым свежим срезом.
+   */
+  snapshotDate: string | null;
   horizonDays: number;
   macroRegion: string;
   targetCoverageDays: number;
@@ -171,13 +178,21 @@ export interface RegionalStocksQueryError {
   error: string;
 }
 
-const REGIONAL_STOCKS_ALLOWED_TARGET_COVERAGE = new Set([30, 42, 60]);
+const REGIONAL_STOCKS_ALLOWED_TARGET_COVERAGE = new Set([14, 30, 42, 60]);
 
 export function parseRegionalStocksQuery(
   url: URL,
 ): RegionalStocksQuery | RegionalStocksQueryError {
-  const snapshotDate = url.searchParams.get("snapshotDate")?.trim() ?? "";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(snapshotDate)) {
+  // snapshotDate теперь опционален: пустая строка / отсутствие параметра →
+  // null, загрузчик отчёта возьмёт самый свежий срез из БД. Если значение
+  // задано — валидируем формат, чтобы поймать опечатки.
+  const snapshotDateRaw = url.searchParams.get("snapshotDate")?.trim() ?? "";
+  let snapshotDate: string | null;
+  if (snapshotDateRaw === "") {
+    snapshotDate = null;
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(snapshotDateRaw)) {
+    snapshotDate = snapshotDateRaw;
+  } else {
     return { ok: false, error: "snapshotDate (YYYY-MM-DD) required" };
   }
 
@@ -198,7 +213,7 @@ export function parseRegionalStocksQuery(
     !Number.isInteger(targetCoverageDays) ||
     !REGIONAL_STOCKS_ALLOWED_TARGET_COVERAGE.has(targetCoverageDays)
   ) {
-    return { ok: false, error: "targetCoverageDays (30|42|60) required" };
+    return { ok: false, error: "targetCoverageDays (14|30|42|60) required" };
   }
 
   return {

@@ -1,0 +1,32 @@
+[Unit]
+Description=wb-stocks forecast UI HTTP server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wbstocks
+Group=wbstocks
+WorkingDirectory=/srv/wb-stocks/current
+ExecStart=/usr/bin/node --env-file=/etc/wb-stocks.env --import tsx scripts/serve-forecast-ui.ts
+Restart=on-failure
+RestartSec=5s
+
+# Hardening — server is read-mostly and only touches /srv/wb-stocks/data.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/wb-stocks/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

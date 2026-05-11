@@ -11,12 +11,13 @@
 
 ## 1. Хосты, авторизация и общие правила
 
-WB не один сервис, а семейство. Мы используем три хоста:
+WB не один сервис, а семейство. Мы используем четыре хоста:
 
 | Хост | Назначение | Что мы тут дёргаем |
 |---|---|---|
 | `https://statistics-api.wildberries.ru` | WB Statistics API (продажи, заказы, остатки) | `GET /api/v1/supplier/stocks` |
 | `https://supplies-api.wildberries.ru` | WB FBW Supplies API (поставки на склады WB) | `POST /api/v1/supplies`, `GET /api/v1/supplies/{ID}`, `GET /api/v1/supplies/{ID}/goods` |
+| `https://common-api.wildberries.ru` | WB Common API (тарифы складов, общая инфо) | `GET /api/v1/tariffs/box`, `GET /api/v1/tariffs/pallet`, `GET /api/tariffs/v1/acceptance/coefficients` |
 | `https://seller-analytics-api.wildberries.ru` | Seller Analytics API (отчёты, аналитика) | пока не используется; сюда уйдёт замена deprecated `supplier/stocks` |
 
 ### 1.1 Авторизация
@@ -35,6 +36,8 @@ Scopes, которые требуются именно нам:
 |---|---|
 | Statistics (`/api/v1/supplier/stocks`) | **Statistics** (Статистика) |
 | FBW Supplies (`/api/v1/supplies/...`) | **Marketplace** (Маркетплейс / FBW) |
+| Common: тарифы коробов/паллет (`/api/v1/tariffs/...`) | **Marketplace** или **Поставки** — достаточно одного |
+| Common: коэффициенты приёмки (`/api/tariffs/v1/acceptance/coefficients`) | **Marketplace** или **Поставки** |
 | Seller Analytics | **Analytics** (Аналитика) |
 
 В .env лежит **один** `WB_TOKEN`. Если планируется разделять права — заведите
@@ -47,6 +50,8 @@ scope-ми.
 |---|---|---|
 | Statistics | официально не публикуется, наблюдаемо «мягкий» | редкие 429, обычный exp-backoff |
 | FBW Supplies | **30 запросов/мин на каждый метод**, на каждый аккаунт | агрессивный 429, нужен длинный backoff |
+| Common: tariffs box / pallet | **60 запросов/мин** (всплеск 5/сек) + базовый лимит **1 запрос/час** для непривилегированных сервисов | мы дёргаем раз в сутки — упереться нереально |
+| Common: acceptance coefficients | **6 запросов/мин** (интервал 10 сек) | при 429 backoff ≥ 2 секунды |
 | Seller Analytics | свой суточный квот на отчёт | мы не используем |
 
 Для FBW Supplies при средней поставке (deta + goods постранично) `1 + 2N`
@@ -367,7 +372,178 @@ TODO в коде нет, добавляйте по факту).
 - `boxTypeID = 0` означает «Не задано» (например, для палет
   `virtualTypeID` важнее).
 
-## 4. Соответствие WB API ↔ наши таблицы
+## 4. Common API — тарифы складов
+
+База: `https://common-api.wildberries.ru`. Эти эндпойнты — единственное на
+сегодня публичное место, где WB отдаёт тарифы доставки/хранения и
+ближайшую доступность приёмки **в разрезе складов**. Готового ответа
+«сколько будет стоить доставка из Сибири в ДФО» здесь нет — только сырые
+тарифы на склад. Для локализации эти данные нужно сочетать с привязкой
+склад → федеральный округ (`wbWarehouseMacroRegion.ts`) и регионом
+заказа.
+
+### 4.1 `GET /api/v1/tariffs/box?date=YYYY-MM-DD` — тарифы для коробов
+
+**Используется в:** `WbCommonClient.getBoxTariffs` →
+`importWbWarehouseTariffs` → `mapBoxTariffEnvelope` →
+`WbWarehouseTariffRepository.saveBoxBatch` → `wb_warehouse_box_tariffs`.
+
+```
+GET https://common-api.wildberries.ru/api/v1/tariffs/box?date=2026-05-11
+Authorization: <token со scope Marketplace или Поставки>
+```
+
+Ответ — envelope:
+
+```json
+{
+  "response": {
+    "data": {
+      "dtNextBox": "2026-06-01",
+      "dtTillMax": "2026-06-30",
+      "warehouseList": [
+        {
+          "warehouseName": "Коледино",
+          "geoName": "Центральный федеральный округ",
+          "boxDeliveryBase": "48",
+          "boxDeliveryLiter": "11,2",
+          "boxDeliveryCoefExpr": "160",
+          "boxDeliveryMarketplaceBase": "40",
+          "boxDeliveryMarketplaceLiter": "11",
+          "boxDeliveryMarketplaceCoefExpr": "125",
+          "boxStorageBase": "0,14",
+          "boxStorageLiter": "0,07",
+          "boxStorageCoefExpr": "115"
+        }
+      ]
+    }
+  }
+}
+```
+
+| Поле WB | В нашей модели | Замечание |
+|---|---|---|
+| `warehouseName` | `warehouse_name` | строка, **обязательно** (часть PK) |
+| `geoName` | `geo_name` | страна или ФО — например `«Центральный федеральный округ»`, `«Сибирский и Дальневосточный»`, `«Казахстан»`. Используется при фильтрации регионов. |
+| `boxDeliveryBase` / `boxDeliveryLiter` | `box_delivery_base` / `box_delivery_liter` | ₽ за первый/доп. литр логистики |
+| `boxDeliveryCoefExpr` | `box_delivery_coef_expr` | % коэффициента; **уже учтён** в `boxDeliveryBase`/`boxDeliveryLiter`. Хранится для аудита. |
+| `boxDeliveryMarketplace*` | `box_delivery_marketplace_*` | то же, но для схемы FBS |
+| `boxStorageBase` / `boxStorageLiter` | `box_storage_base` / `box_storage_liter` | ₽ за хранение литра в день |
+| `boxStorageCoefExpr` | `box_storage_coef_expr` | % коэффициента хранения; уже учтён |
+| `dtNextBox` / `dtTillMax` | дублируются в каждую строку | даты смены тарифа |
+
+⚠️ **Формат чисел.** Все числовые поля приходят строками с запятой как
+десятичным разделителем (`"0,14"`, `"11,2"`) и иногда c пробелом/NBSP
+как разделителем тысяч (`"1 039"`). Парсятся в `parseTariffDecimal` →
+`number | null`; пустая строка превращается в `null`.
+
+### 4.2 `GET /api/v1/tariffs/pallet?date=YYYY-MM-DD` — тарифы для паллет
+
+**Используется в:** `WbCommonClient.getPalletTariffs` →
+`importWbWarehouseTariffs` → `mapPalletTariffEnvelope` →
+`WbWarehouseTariffRepository.savePalletBatch` →
+`wb_warehouse_pallet_tariffs`.
+
+Схема ответа — аналогичный envelope, поля другие:
+
+| Поле WB | В нашей модели | Замечание |
+|---|---|---|
+| `warehouseName` | `warehouse_name` | **обязательно** |
+| `palletDeliveryValueBase` | `pallet_delivery_value_base` | ₽ за 1 литр логистики |
+| `palletDeliveryValueLiter` | `pallet_delivery_value_liter` | ₽ за каждый доп. литр |
+| `palletDeliveryExpr` | `pallet_delivery_expr` | % коэффициента; уже учтён |
+| `palletStorageValueExpr` | `pallet_storage_value_expr` | ₽ за хранение одной монопаллеты (за единицу, не за литр!) |
+| `palletStorageExpr` | `pallet_storage_expr` | % коэффициента хранения; уже учтён |
+| `dtNextPallet` / `dtTillMax` | дублируются в каждую строку | даты смены тарифа |
+
+⚠️ Поле `geoName` в pallet endpoint **не приходит** — наш столбец
+`geo_name` в `wb_warehouse_pallet_tariffs` оставлен как опциональный
+для совместимости (если WB решит добавить — мы его подхватим без
+миграции).
+
+### 4.3 `GET /api/tariffs/v1/acceptance/coefficients` — приёмка на 14 дней
+
+**Используется в:** `WbCommonClient.getAcceptanceCoefficients` →
+`importWbWarehouseTariffs` → `mapAcceptanceCoefficient` →
+`WbWarehouseTariffRepository.saveAcceptanceBatch` →
+`wb_warehouse_acceptance_coefficients`.
+
+```
+GET https://common-api.wildberries.ru/api/tariffs/v1/acceptance/coefficients
+GET https://common-api.wildberries.ru/api/tariffs/v1/acceptance/coefficients?warehouseIDs=507,117501
+Authorization: <token>
+```
+
+Один параметр — опциональный `warehouseIDs` (запятая, без пробелов).
+Ответ — **плоский массив** объектов на 14 дней вперёд, по одной строке на
+`(date × warehouseID × boxTypeID)`:
+
+```json
+[
+  {
+    "date": "2026-05-12T00:00:00Z",
+    "coefficient": 0,
+    "warehouseID": 507,
+    "warehouseName": "Коледино",
+    "allowUnload": true,
+    "boxTypeID": 2,
+    "boxTypeName": "Короба",
+    "storageCoef": "1",
+    "deliveryCoef": "1",
+    "deliveryBaseLiter": "48",
+    "deliveryAdditionalLiter": "11,2",
+    "storageBaseLiter": "0,14",
+    "storageAdditionalLiter": "0,07",
+    "isSortingCenter": false
+  }
+]
+```
+
+Значения `coefficient`:
+
+- `-1` — приёмка недоступна, **независимо от `allowUnload`**;
+- `0` — бесплатная приёмка;
+- `1` или больше — множитель стоимости приёмки.
+
+«Приёмка доступна» = `coefficient ∈ {0, 1}` **и** `allowUnload === true`.
+
+| Поле WB | В нашей модели | Замечание |
+|---|---|---|
+| `date` | `effective_date` | RFC3339 → обрезается до `YYYY-MM-DD` |
+| `coefficient` | `coefficient` | REAL, обязателен |
+| `warehouseID` | `warehouse_id` | int, обязателен |
+| `boxTypeID` | `box_type_id` | 2=Короба, 5=Монопаллеты, 6=Суперсейф. Для QR-поставок поле не приходит → `null` |
+| `allowUnload` | `allow_unload` | boolean → INTEGER 0/1 в БД |
+| `storageCoef` / `deliveryCoef` | `storage_coef` / `delivery_coef` | пустая строка → `null` |
+| `storageBaseLiter` | `storage_base_liter` | для паллет — стоимость за паллету; для коробов — стоимость литра |
+| `storageAdditionalLiter` | `storage_additional_liter` | для паллет всегда `null` |
+| `isSortingCenter` | `is_sorting_center` | true = СЦ, false = обычный склад |
+
+⚠️ Здесь и `coefficient`, и поля стоимости WB иногда отдаёт **числом**
+(не строкой) — наш zod-схема принимает оба варианта, парсер
+нормализует.
+
+### 4.4 Идемпотентность импорта
+
+| Таблица | Ключ уникальности | Поведение re-run |
+|---|---|---|
+| `wb_warehouse_box_tariffs` | `(tariff_date, warehouse_name)` | UPSERT — последний прогон за дату перезаписывает |
+| `wb_warehouse_pallet_tariffs` | `(tariff_date, warehouse_name)` | UPSERT |
+| `wb_warehouse_acceptance_coefficients` | `(fetched_at, effective_date, warehouse_id, box_type_id)` | INSERT OR IGNORE; **история сохраняется** (каждый прогон — свой `fetched_at`) |
+
+Box/pallet — это «расписание тарифов» (меняется редко), нам важна
+последняя версия. Acceptance — это «прогноз на 14 дней» (WB пересчитывает
+в течение суток), история нужна, чтобы можно было сравнить «что WB
+обещал утром vs. что вечером».
+
+### 4.5 Что мы сознательно НЕ дёргаем из Common API
+
+| Эндпойнт | Почему |
+|---|---|
+| `GET /api/v1/tariffs/return` | возвраты — отдельная задача, не входит в скоуп локализации остатков |
+| `GET /api/v1/tariffs/commission` | комиссия по категориям — для P&L, не для нашего модуля |
+
+## 5. Соответствие WB API ↔ наши таблицы
 
 | WB endpoint | Наш слой | Целевая таблица |
 |---|---|---|
@@ -375,8 +551,11 @@ TODO в коде нет, добавляйте по факту).
 | `POST /api/v1/supplies` | `WbSuppliesClient.listSupplies` → `importWbSupplies` → `parseListRow` → `WbSupplyRepository.upsertSupply` | `wb_supplies` |
 | `GET /api/v1/supplies/{ID}` | `WbSuppliesClient.getSupplyDetails` → `importWbSupplies` → `parseDetails` → `buildSupplyRecord` (мерж в заголовок) | `wb_supplies` (обогащение) + `wb_supply_status_history` |
 | `GET /api/v1/supplies/{ID}/goods` | `WbSuppliesClient.getSupplyGoods` → `importWbSupplies` → `parseGoodsRow` → `WbSupplyRepository.replaceItemsForSupply` | `wb_supply_items` |
+| `GET /api/v1/tariffs/box` | `WbCommonClient.getBoxTariffs` → `importWbWarehouseTariffs` → `mapBoxTariffEnvelope` → `WbWarehouseTariffRepository.saveBoxBatch` | `wb_warehouse_box_tariffs` |
+| `GET /api/v1/tariffs/pallet` | `WbCommonClient.getPalletTariffs` → `importWbWarehouseTariffs` → `mapPalletTariffEnvelope` → `WbWarehouseTariffRepository.savePalletBatch` | `wb_warehouse_pallet_tariffs` |
+| `GET /api/tariffs/v1/acceptance/coefficients` | `WbCommonClient.getAcceptanceCoefficients` → `importWbWarehouseTariffs` → `mapAcceptanceCoefficient` → `WbWarehouseTariffRepository.saveAcceptanceBatch` | `wb_warehouse_acceptance_coefficients` |
 
-## 5. Что мы сознательно НЕ дёргаем
+## 6. Что мы сознательно НЕ дёргаем
 
 | Эндпойнт | Почему не нужен |
 |---|---|
@@ -386,7 +565,7 @@ TODO в коде нет, добавляйте по факту).
 | `POST /api/v1/supplies/{ID}/orders` (товары на закрытие) | управление поставками не в скоупе модуля |
 | `GET /api/v1/warehouses` (справочник складов) | имени склада из ответа достаточно, отдельная справочная таблица сейчас избыточна |
 
-## 6. Источники и release notes
+## 7. Источники и release notes
 
 - Главный портал: <https://dev.wildberries.ru>
 - Список изменений API: <https://dev.wildberries.ru/news>

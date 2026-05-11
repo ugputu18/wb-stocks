@@ -247,6 +247,74 @@ const MIGRATIONS: readonly string[] = [
      region_key   TEXT PRIMARY KEY,
      macro_region TEXT NOT NULL
    )`,
+  `CREATE TABLE IF NOT EXISTS wb_warehouse_box_tariffs (
+     id                                INTEGER PRIMARY KEY AUTOINCREMENT,
+     tariff_date                       TEXT NOT NULL,
+     fetched_at                        TEXT NOT NULL,
+     warehouse_name                    TEXT NOT NULL,
+     geo_name                          TEXT,
+     box_delivery_base                 REAL,
+     box_delivery_liter                REAL,
+     box_delivery_coef_expr            REAL,
+     box_delivery_marketplace_base     REAL,
+     box_delivery_marketplace_liter    REAL,
+     box_delivery_marketplace_coef_expr REAL,
+     box_storage_base                  REAL,
+     box_storage_liter                 REAL,
+     box_storage_coef_expr             REAL,
+     dt_next_box                       TEXT,
+     dt_till_max                       TEXT
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS ux_wb_warehouse_box_tariffs_key
+     ON wb_warehouse_box_tariffs (tariff_date, warehouse_name)`,
+  `CREATE INDEX IF NOT EXISTS ix_wb_warehouse_box_tariffs_date
+     ON wb_warehouse_box_tariffs (tariff_date)`,
+  `CREATE INDEX IF NOT EXISTS ix_wb_warehouse_box_tariffs_geo
+     ON wb_warehouse_box_tariffs (geo_name)`,
+  `CREATE TABLE IF NOT EXISTS wb_warehouse_pallet_tariffs (
+     id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+     tariff_date                 TEXT NOT NULL,
+     fetched_at                  TEXT NOT NULL,
+     warehouse_name              TEXT NOT NULL,
+     geo_name                    TEXT,
+     pallet_delivery_value_base  REAL,
+     pallet_delivery_value_liter REAL,
+     pallet_delivery_expr        REAL,
+     pallet_storage_value_expr   REAL,
+     pallet_storage_expr         REAL,
+     dt_next_pallet              TEXT,
+     dt_till_max                 TEXT
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS ux_wb_warehouse_pallet_tariffs_key
+     ON wb_warehouse_pallet_tariffs (tariff_date, warehouse_name)`,
+  `CREATE INDEX IF NOT EXISTS ix_wb_warehouse_pallet_tariffs_date
+     ON wb_warehouse_pallet_tariffs (tariff_date)`,
+  `CREATE TABLE IF NOT EXISTS wb_warehouse_acceptance_coefficients (
+     id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+     fetched_at               TEXT NOT NULL,
+     effective_date           TEXT NOT NULL,
+     warehouse_id             INTEGER NOT NULL,
+     warehouse_name           TEXT,
+     box_type_id              INTEGER,
+     box_type_name            TEXT,
+     coefficient              REAL NOT NULL,
+     allow_unload             INTEGER,
+     storage_coef             REAL,
+     delivery_coef            REAL,
+     delivery_base_liter      REAL,
+     delivery_additional_liter REAL,
+     storage_base_liter       REAL,
+     storage_additional_liter REAL,
+     is_sorting_center        INTEGER
+   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS ux_wb_warehouse_acceptance_key
+     ON wb_warehouse_acceptance_coefficients (
+       fetched_at, effective_date, warehouse_id, COALESCE(box_type_id, -1)
+     )`,
+  `CREATE INDEX IF NOT EXISTS ix_wb_warehouse_acceptance_eff_date
+     ON wb_warehouse_acceptance_coefficients (effective_date)`,
+  `CREATE INDEX IF NOT EXISTS ix_wb_warehouse_acceptance_warehouse
+     ON wb_warehouse_acceptance_coefficients (warehouse_id, effective_date)`,
 ];
 
 export function openDatabase(path: string): DbHandle {
@@ -259,6 +327,7 @@ export function openDatabase(path: string): DbHandle {
   runMigrations(db);
   migrateDemandWindowColumns(db);
   migrateRegionDemandSnapshotColumn(db);
+  migrateMergeSiberianFarEasternMacroRegions(db);
   return db;
 }
 
@@ -281,6 +350,25 @@ function ensureColumn(
   const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
   if (rows.some((r) => r.name === column)) return;
   db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+/**
+ * Старые БД: операторские override-строки в `wb_region_macro_region` могли
+ * использовать раздельные лейблы «Сибирский» / «Дальневосточный» — оба теперь
+ * слиты в единый «Сибирский и Дальневосточный» (как и в WB-кабинете). Чтобы
+ * override-строки не «обгоняли» новый bootstrap и не возвращали выпавшие лейблы
+ * в lookup, переписываем их одноразовым UPDATE.
+ *
+ * Идемпотентно: если все строки уже на новом лейбле — UPDATE с нулевым эффектом.
+ * Таблица создаётся первым проходом миграций выше, так что проверять её
+ * существование не нужно.
+ */
+function migrateMergeSiberianFarEasternMacroRegions(db: DbHandle): void {
+  db.prepare(
+    `UPDATE wb_region_macro_region
+        SET macro_region = 'Сибирский и Дальневосточный'
+      WHERE macro_region IN ('Сибирский', 'Дальневосточный')`,
+  ).run();
 }
 
 /** Старые БД: колонка `forecast_daily_demand` → `regional_forecast_daily_demand`. */

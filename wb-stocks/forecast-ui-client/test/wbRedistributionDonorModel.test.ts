@@ -213,7 +213,7 @@ describe("unknown warehouse usage stats", () => {
       ["1|0", [wh("unseen-wh-abc", 0, 1, 1, 1), wh("unseen-wh-abc", 0, 1, 1, 1)]],
     ]);
     const bySku = new Map<string, Map<string, number>>();
-    bySku.set("1|0", new Map([["Сибирский", 8]]));
+    bySku.set("1|0", new Map([["Сибирский и Дальневосточный", 8]]));
     computeDonorMacroRegionRecommendations(donorRows, net, "казань", 14, 1, bySku, 30);
     computeDonorMacroRegionRecommendations(donorRows, net, "казань", 14, 1, bySku, 30);
     expect(getUnknownWarehouseUsageStats().get("unseen-wh-abc")).toBe(4);
@@ -377,7 +377,7 @@ describe("computeDonorMacroRegionRecommendations", () => {
       ],
     ]);
     const bySku = new Map<string, Map<string, number>>();
-    bySku.set("1|0", new Map([["Сибирский", 8]]));
+    bySku.set("1|0", new Map([["Сибирский и Дальневосточный", 8]]));
     const r = computeDonorMacroRegionRecommendations(
       donorRows,
       net,
@@ -391,7 +391,7 @@ describe("computeDonorMacroRegionRecommendations", () => {
     expect(r[0].preferredWarehouseKey).toBe("красноярск");
   });
 
-  it("includes Siberian+FarEast-mapped warehouses when target macro is Сибирский", () => {
+  it("включает Сибирь+ДВ-склады, когда цель — единый макрорегион «Сибирский и Дальневосточный»", () => {
     const donorRows = [donorRow(1, "0", 1000, 2)];
     const net = new Map<string, unknown[]>([
       [
@@ -403,7 +403,7 @@ describe("computeDonorMacroRegionRecommendations", () => {
       ],
     ]);
     const bySku = new Map<string, Map<string, number>>();
-    bySku.set("1|0", new Map([["Сибирский", 8]]));
+    bySku.set("1|0", new Map([["Сибирский и Дальневосточный", 8]]));
     const r = computeDonorMacroRegionRecommendations(
       donorRows,
       net,
@@ -414,7 +414,7 @@ describe("computeDonorMacroRegionRecommendations", () => {
       30,
     );
     expect(r.length).toBe(1);
-    expect(r[0].targetMacroRegion).toBe("Сибирский");
+    expect(r[0].targetMacroRegion).toBe("Сибирский и Дальневосточный");
     expect(r[0].candidateWarehouseKeys).toEqual(["новосибирск", "красноярск"]);
     expect(r[0].candidateWarehouseLabels).toEqual(["новосибирск", "красноярск"]);
     expect(r[0].hasCandidateWarehouses).toBe(true);
@@ -433,7 +433,7 @@ describe("computeDonorMacroRegionRecommendations", () => {
       ],
     ]);
     const bySku = new Map<string, Map<string, number>>();
-    bySku.set("1|0", new Map([["Сибирский", 8]]));
+    bySku.set("1|0", new Map([["Сибирский и Дальневосточный", 8]]));
     const r = computeDonorMacroRegionRecommendations(
       donorRows,
       net,
@@ -481,7 +481,7 @@ describe("computeDonorMacroRegionRecommendations", () => {
       ["1|0", [wh("сц барнаул", 40, 2, 1, 3)]],
     ]);
     const bySku = new Map<string, Map<string, number>>();
-    bySku.set("1|0", new Map([["Сибирский", 10]]));
+    bySku.set("1|0", new Map([["Сибирский и Дальневосточный", 10]]));
     const r = computeDonorMacroRegionRecommendations(
       donorRows,
       net,
@@ -525,7 +525,7 @@ describe("computeDonorMacroRegionRecommendations", () => {
     const donorRows = [donorRow(1, "0", 1000, 2)];
     const net = new Map<string, unknown[]>([["1|0", [wh("казань", 0, 10, 1, 5)]]]);
     const bySku = new Map<string, Map<string, number>>();
-    bySku.set("1|0", new Map([["Сибирский", 8]]));
+    bySku.set("1|0", new Map([["Сибирский и Дальневосточный", 8]]));
     const r = computeDonorMacroRegionRecommendations(
       donorRows,
       net,

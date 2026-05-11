@@ -1,0 +1,13 @@
+[Unit]
+Description=wb-stocks: hourly WB warehouse stocks import
+
+[Timer]
+# Every hour at :05 — a small offset from :00 keeps logs separate
+# from cron and gives WB API a calmer window.
+OnCalendar=*-*-* *:05:00
+Persistent=true
+RandomizedDelaySec=2min
+Unit=wb-import-stocks.service
+
+[Install]
+WantedBy=timers.target

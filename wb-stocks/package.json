@@ -11,6 +11,8 @@
     "import:stocks": "node --env-file=.env --import tsx src/cli/importStocks.ts",
     "import:own-stocks": "node --env-file=.env --import tsx scripts/import-own-warehouse-state.ts",
     "update:wb-supplies": "node --env-file=.env --import tsx scripts/update-wb-supplies.ts",
+    "update:wb-tariffs": "node --env-file=.env --import tsx scripts/update-wb-tariffs.ts",
+    "report:warehouse-tariffs": "node --env-file=.env --import tsx scripts/report-warehouse-tariffs.ts",
     "forecast:sales-mvp": "node --env-file=.env --import tsx scripts/run-sales-forecast-mvp.ts",
     "serve:forecast-ui": "node --env-file=.env --import tsx scripts/serve-forecast-ui.ts",
     "report:warehouse-macro-coverage": "node --env-file=.env --import tsx scripts/report-warehouse-macro-coverage.ts",

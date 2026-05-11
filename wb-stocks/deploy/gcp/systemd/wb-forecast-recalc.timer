@@ -1,0 +1,12 @@
+[Unit]
+Description=wb-stocks: daily forecast recalculation
+
+[Timer]
+# 04:00 UTC — after the daily supplies sync, before users come in.
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=5min
+Unit=wb-forecast-recalc.service
+
+[Install]
+WantedBy=timers.target

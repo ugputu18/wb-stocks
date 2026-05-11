@@ -1,17 +1,24 @@
 import type { JSX } from "preact";
-import { useCallback, useMemo, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import {
   downloadForecastCsv,
   fetchRegionalStocks,
+  fetchWarehouseTariffs,
   ForecastApiError,
 } from "../api/client.js";
-import type { RegionalStocksResponse } from "../api/types.js";
+import type {
+  RegionalStocksResponse,
+  WarehouseTariff,
+} from "../api/types.js";
 import { FORECAST_UI_SPA_ROUTES } from "../routes.js";
 import { defaultFormState, formStateFromSearchParams } from "../state/urlState.js";
 import {
   WB_MACRO_REGION_CLUSTERS,
 } from "../../../src/domain/wbWarehouseMacroRegion.js";
-import { listLiveWarehousesForMacroRegion } from "../utils/wbWarehouseRegion.js";
+import {
+  listLiveWarehousesForMacroRegion,
+  type MacroRegionWarehouseInfo,
+} from "../utils/wbWarehouseRegion.js";
 import {
   badgeClass,
   formatInt,
@@ -97,14 +104,116 @@ function summaryCell(label: string, value: string | number, cls = ""): JSX.Eleme
   );
 }
 
+interface WarehouseHintEntry extends MacroRegionWarehouseInfo {
+  /**
+   * `boxDeliveryBase` из тарифов WB — ₽ за коробку минимального объёма (FBO).
+   * `null`, если для склада нет записи в `wb_warehouse_box_tariffs` (новый
+   * склад, СЦ без публичного тарифа, не подгрузили тарифы и т.п.).
+   */
+  boxDeliveryBase: number | null;
+}
+
+/**
+ * Сшивает справочный список складов макрорегиона с тарифами WB и
+ * сортирует от самого дешёвого к самому дорогому. Склады без цены идут в
+ * конец и упорядочены по `displayName` — оператор должен видеть, что они
+ * есть, но не на «лучших» позициях.
+ *
+ * Чистая функция: завязана на детерминированный `tariffByKey`-map и реестр
+ * складов; вызывается из `useMemo`, поэтому пересчёт стабильный.
+ */
+function decorateRegionWarehousesWithTariffs(
+  warehouses: readonly MacroRegionWarehouseInfo[],
+  tariffByKey: ReadonlyMap<string, number | null>,
+): WarehouseHintEntry[] {
+  const out: WarehouseHintEntry[] = warehouses.map((w) => ({
+    ...w,
+    boxDeliveryBase: tariffByKey.get(w.warehouseKey) ?? null,
+  }));
+  out.sort((a, b) => {
+    const aHas = a.boxDeliveryBase !== null;
+    const bHas = b.boxDeliveryBase !== null;
+    if (aHas && bHas) {
+      const cmp = (a.boxDeliveryBase as number) - (b.boxDeliveryBase as number);
+      if (cmp !== 0) return cmp;
+      return a.displayName.localeCompare(b.displayName, "ru");
+    }
+    if (aHas) return -1;
+    if (bHas) return 1;
+    return a.displayName.localeCompare(b.displayName, "ru");
+  });
+  return out;
+}
+
+function formatRouble(n: number): string {
+  // Тарифы в WB обычно целые либо одна-две цифры после запятой; форматируем
+  // как "34" / "34,5" — без длинных хвостов плавающей точки.
+  return Number.isInteger(n)
+    ? String(n)
+    : n.toFixed(2).replace(/\.?0+$/, "").replace(".", ",");
+}
+
+function formatWarehouseHint(w: WarehouseHintEntry): string {
+  const base = w.isSortingCenter ? `${w.displayName} (СЦ)` : w.displayName;
+  if (w.boxDeliveryBase === null) return base;
+  return `${base} (${formatRouble(w.boxDeliveryBase)}\u00A0₽)`;
+}
+
 export function RegionalStocksPage(): JSX.Element {
   const [form, setForm] = useState<RegionalStocksForm>(initForm);
   const [data, setData] = useState<RegionalStocksResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warehouseTariffs, setWarehouseTariffs] = useState<
+    readonly WarehouseTariff[]
+  >([]);
+  const [tariffDate, setTariffDate] = useState<string | null>(null);
 
   const sp = useMemo(() => buildSearchParams(form), [form]);
+
+  // Тарифы — медленно меняющийся справочник, не зависит от фильтров отчёта;
+  // грузим один раз при монтировании. Молча проглатываем ошибку:
+  // справочный список складов важнее, чем подсказка цены, и не должен
+  // ломаться, если `update:wb-tariffs` ещё ни разу не запускали.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetchWarehouseTariffs();
+        if (cancelled) return;
+        setWarehouseTariffs(res.tariffs);
+        setTariffDate(res.tariffDate);
+      } catch (e) {
+        if (cancelled) return;
+        // Не показываем оператору как «ошибка страницы» — деградируем
+        // тихо, но оставляем след в консоли для диагностики.
+        // eslint-disable-next-line no-console
+        console.warn("Failed to fetch warehouse tariffs:", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const tariffByKey = useMemo(() => {
+    const m = new Map<string, number | null>();
+    for (const t of warehouseTariffs) {
+      // Если для одного склада пришло несколько записей (теоретически не
+      // должно — PK = (tariff_date, warehouse_name)), берём минимальную
+      // цену — оптимистичная подсказка.
+      const prev = m.get(t.warehouseKey);
+      if (
+        prev === undefined ||
+        prev === null ||
+        (t.boxDeliveryBase !== null && t.boxDeliveryBase < prev)
+      ) {
+        m.set(t.warehouseKey, t.boxDeliveryBase);
+      }
+    }
+    return m;
+  }, [warehouseTariffs]);
 
   const patch = (p: Partial<RegionalStocksForm>) => {
     setForm((f) => ({ ...f, ...p }));
@@ -163,9 +272,20 @@ export function RegionalStocksPage(): JSX.Element {
   // Справочно: склады, которые входят в выбранный макрорегион и реально
   // участвуют в "Доступно в регионе" (зеркало фильтра отчёта). Считаем
   // на клиенте по статическому реестру — без round-trip на сервер.
+  // Поверх — подмешиваем тарифы WB (`boxDeliveryBase` — ₽ за коробку
+  // минимального объёма) и сортируем от самого дешёвого склада к самому
+  // дорогому. Склады без публикуемого тарифа уезжают в конец списка.
   const regionWarehouses = useMemo(
-    () => listLiveWarehousesForMacroRegion(form.macroRegion),
-    [form.macroRegion],
+    () =>
+      decorateRegionWarehousesWithTariffs(
+        listLiveWarehousesForMacroRegion(form.macroRegion),
+        tariffByKey,
+      ),
+    [form.macroRegion, tariffByKey],
+  );
+  const hasAnyTariff = useMemo(
+    () => regionWarehouses.some((w) => w.boxDeliveryBase !== null),
+    [regionWarehouses],
   );
 
   return (
@@ -200,20 +320,22 @@ export function RegionalStocksPage(): JSX.Element {
               </select>
               <small
                 class="regional-stocks-warehouse-hint muted"
-                title="Эти склады входят в выбранный макрорегион и учитываются в столбце «Доступно в регионе» (виртуальные склады исключены, как и в самом отчёте)"
+                title={
+                  hasAnyTariff
+                    ? "Склады выбранного макрорегиона, отсортированные от самого дешёвого к самому дорогому. В скобках — базовый тариф WB за коробку минимального объёма (FBO). Виртуальные склады исключены."
+                    : "Эти склады входят в выбранный макрорегион и учитываются в столбце «Доступно в регионе» (виртуальные склады исключены, как и в самом отчёте). Цены тарифов появятся после запуска pnpm update:wb-tariffs."
+                }
               >
                 {regionWarehouses.length > 0 ? (
                   <>
                     <span class="regional-stocks-warehouse-hint-label">
-                      Склады региона ({regionWarehouses.length}):
+                      Склады региона ({regionWarehouses.length}
+                      {tariffDate && hasAnyTariff
+                        ? `, тариф на ${tariffDate}`
+                        : ""}
+                      ):
                     </span>{" "}
-                    {regionWarehouses
-                      .map((w) =>
-                        w.isSortingCenter
-                          ? `${w.displayName} (СЦ)`
-                          : w.displayName,
-                      )
-                      .join(", ")}
+                    {regionWarehouses.map(formatWarehouseHint).join(", ")}
                   </>
                 ) : (
                   "Склады не найдены"

@@ -54,6 +54,35 @@ export interface WarehouseKeysResponse {
   warehouseKeys: string[];
 }
 
+/**
+ * Справочные тарифы по WB-складам (один день, MAX(tariff_date) в БД).
+ * Используется страницей «Запасы WB по региону» для подсказки оператору,
+ * какой склад в выбранном макрорегионе дешевле. `boxDeliveryBase` — это
+ * фиксированная цена за коробку минимального объёма (до 1 литра)
+ * по схеме FBO.
+ *
+ * Если в БД ещё нет тарифов (новая инсталляция, не отработал
+ * `pnpm update:wb-tariffs`) — сервер возвращает `tariffDate: null`,
+ * `tariffs: []`; UI деградирует «как было», без цен.
+ */
+export interface WarehouseTariff {
+  /** Канонический ключ склада после `normalizeWarehouseName`. */
+  warehouseKey: string;
+  /** Имя как пришло из WB (для отладки/логов). */
+  warehouseName: string;
+  /** ФО/страна по версии WB (`Сибирский и Дальневосточный`, `Казахстан`, …). */
+  geoName: string | null;
+  /** ₽ за коробку минимального объёма (≤ 1 литр), FBO. */
+  boxDeliveryBase: number | null;
+  /** ₽ за каждый доп. литр сверх базового. Не используется в UI, отдаём для полноты. */
+  boxDeliveryLiter: number | null;
+}
+
+export interface WarehouseTariffsResponse {
+  tariffDate: string | null;
+  tariffs: WarehouseTariff[];
+}
+
 export interface RegionalStocksResponse {
   snapshotDate: string;
   horizonDays: number;

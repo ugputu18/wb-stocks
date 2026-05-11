@@ -73,6 +73,29 @@ export class StockSnapshotRepository {
     return r.m ?? null;
   }
 
+  /**
+   * `(warehouse_name → Σ quantity)` from the latest WB stocks snapshot,
+   * across all SKUs. Used by warehouse-tariff reporting to show "how
+   * many units are currently parked at each warehouse" alongside the
+   * tariff. Empty map if we have never imported stocks.
+   */
+  getLatestStockUnitsByWarehouse(): { warehouseName: string; units: number }[] {
+    const latest = this.db
+      .prepare(`SELECT MAX(snapshot_at) AS m FROM wb_stock_snapshots`)
+      .get() as { m: string | null };
+    if (!latest.m) return [];
+    return this.db
+      .prepare(
+        `SELECT warehouse_name AS warehouseName,
+                SUM(quantity)  AS units
+           FROM wb_stock_snapshots
+          WHERE snapshot_at = ?
+          GROUP BY warehouse_name
+          ORDER BY warehouse_name`,
+      )
+      .all(latest.m) as { warehouseName: string; units: number }[];
+  }
+
   /** All rows belonging to a specific snapshot, in insertion order. */
   getBySnapshotAt(snapshotAt: string): StockSnapshotRecord[] {
     return this.db

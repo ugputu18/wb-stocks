@@ -16,6 +16,10 @@ const envSchema = z.object({
     .string()
     .url()
     .default("https://supplies-api.wildberries.ru"),
+  WB_COMMON_BASE_URL: z
+    .string()
+    .url()
+    .default("https://common-api.wildberries.ru"),
   DATABASE_PATH: z.string().min(1).default("./data/wb-stocks.sqlite"),
   LOG_LEVEL: z
     .enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"])

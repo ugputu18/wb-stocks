@@ -1,6 +1,8 @@
 import { WbRegionDemandSnapshotRepository } from "../../../infra/wbRegionDemandSnapshotRepository.js";
 import { WbRegionMacroRegionRepository } from "../../../infra/wbRegionMacroRegionRepository.js";
+import { WbWarehouseTariffRepository } from "../../../infra/wbWarehouseTariffRepository.js";
 import { buildRegionMacroLookup } from "../../../domain/wbRegionMacroRegion.js";
+import { warehouseKey as toWarehouseKey } from "../../../domain/warehouseName.js";
 import type { ForecastReportFilter } from "../../../infra/wbForecastSnapshotRepository.js";
 import { json } from "../http/json.js";
 import { readBody } from "../http/readBody.js";
@@ -188,6 +190,35 @@ export function createForecastReadRoutes(deps: ForecastUiHandlerDeps): ForecastR
           ownWarehouseCode: q.ownWarehouseCode ?? "main",
           viewMode: q.viewMode,
           rows: supplierRows,
+        });
+      },
+    },
+    {
+      match: (req, url) =>
+        req.method === "GET" && url.pathname === "/api/forecast/warehouse-tariffs",
+      handle: (req, res, url) => {
+        void req;
+        void url;
+        // Справочные данные: для UI «Запасы WB по региону» нужна только
+        // базовая стоимость доставки за коробку минимального объёма
+        // (`boxDeliveryBase` ≈ ₽ за 1 литр FBO). Дата тарифов резолвится
+        // сервером как MAX(tariff_date) — оператор не выбирает её руками.
+        const tariffRepo = new WbWarehouseTariffRepository(deps.db);
+        const tariffDate = tariffRepo.getLatestBoxTariffDate();
+        if (tariffDate === null) {
+          json(res, 200, { tariffDate: null, tariffs: [] });
+          return;
+        }
+        const rows = tariffRepo.getBoxForDate(tariffDate);
+        json(res, 200, {
+          tariffDate,
+          tariffs: rows.map((r) => ({
+            warehouseKey: toWarehouseKey(r.warehouseName),
+            warehouseName: r.warehouseName,
+            geoName: r.geoName,
+            boxDeliveryBase: r.boxDeliveryBase,
+            boxDeliveryLiter: r.boxDeliveryLiter,
+          })),
         });
       },
     },

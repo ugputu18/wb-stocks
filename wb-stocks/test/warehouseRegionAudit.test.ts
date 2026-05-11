@@ -38,7 +38,7 @@ describe("buildWarehouseRegionAudit", () => {
 
 describe("wbWarehouseMacroRegion new keys", () => {
   it("maps virtual and SC warehouses", () => {
-    expect(getWarehouseMacroRegion("сц барнаул")).toBe("Сибирский");
+    expect(getWarehouseMacroRegion("сц барнаул")).toBe("Сибирский и Дальневосточный");
     expect(getWarehouseMacroRegion("виртуальный новосибирск")).toBe(
       "Сибирский и Дальневосточный",
     );

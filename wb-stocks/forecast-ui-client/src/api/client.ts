@@ -7,6 +7,7 @@ import type {
   SupplierReplenishmentResponse,
   WarehouseKeysResponse,
   WarehouseRegionAuditResponse,
+  WarehouseTariffsResponse,
 } from "./types.js";
 
 export interface ApiOptions extends RequestInit {
@@ -144,6 +145,19 @@ export async function fetchRegionalStocks(
     `/api/forecast/regional-stocks${buildApiSearchParams(sp)}`,
     { bearerToken: token },
   );
+}
+
+/**
+ * Справочные тарифы по складам WB (последний срез в БД). Не зависит от
+ * фильтров регионального отчёта — UI грузит их один раз при монтировании
+ * страницы.
+ */
+export async function fetchWarehouseTariffs(
+  token?: string,
+): Promise<WarehouseTariffsResponse> {
+  return apiJson<WarehouseTariffsResponse>("/api/forecast/warehouse-tariffs", {
+    bearerToken: token,
+  });
 }
 
 export interface FetchRegionalDemandBody {

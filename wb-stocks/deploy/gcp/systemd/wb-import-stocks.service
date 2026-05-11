@@ -1,0 +1,26 @@
+[Unit]
+Description=wb-stocks: import WB warehouse stocks snapshot
+After=network-online.target forecast-ui.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=wbstocks
+Group=wbstocks
+WorkingDirectory=/srv/wb-stocks/current
+# Cap individual run; if WB API is slow, fail and let the next tick retry.
+TimeoutStartSec=15min
+ExecStart=/usr/bin/node --env-file=/etc/wb-stocks.env --import tsx src/cli/importStocks.ts
+Nice=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/wb-stocks/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+StandardOutput=journal
+StandardError=journal

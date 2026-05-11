@@ -1,0 +1,157 @@
+#cloud-config
+# Provisions a wb-stocks VM:
+#   1. Installs Node 22, pnpm, build tools (better-sqlite3 is native), nginx, Ops Agent.
+#   2. Formats (first boot only) and mounts the attached data disk at /srv/wb-stocks/data.
+#   3. Clones the repo, builds the forecast UI bundle.
+#   4. Pulls secrets from Secret Manager into /etc/wb-stocks.env (0600, root:wbstocks).
+#   5. Installs and starts systemd units for the UI server and 4 periodic jobs.
+#
+# Instance metadata used:
+#   wb-stocks-repo-url  — git clone URL (HTTPS recommended for public repos)
+#   wb-stocks-git-ref   — branch / tag / sha to check out (defaults to "main")
+#
+# The data disk is expected to be attached with device-name=wb-stocks-data,
+# which surfaces as /dev/disk/by-id/google-wb-stocks-data inside the VM.
+
+users:
+  - name: wbstocks
+    system: true
+    shell: /usr/sbin/nologin
+    home: /var/lib/wbstocks
+    homedir: /var/lib/wbstocks
+
+write_files:
+  - path: /usr/local/sbin/wb-stocks-bootstrap.sh
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      # First-boot bootstrap. Idempotent — safe to re-run after image reboot
+      # or after editing this cloud-init file.
+      set -euo pipefail
+
+      log() { echo "[bootstrap] $*"; }
+      meta() {
+        curl -fsS -H 'Metadata-Flavor: Google' \
+          "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1" \
+          || true
+      }
+
+      REPO_URL="$(meta wb-stocks-repo-url)"
+      GIT_REF="$(meta wb-stocks-git-ref)"
+      : "${GIT_REF:=main}"
+      if [[ -z "${REPO_URL}" ]]; then
+        log "FATAL: instance metadata wb-stocks-repo-url is empty"
+        exit 1
+      fi
+
+      APP_DIR=/srv/wb-stocks/app
+      DATA_DIR=/srv/wb-stocks/data
+      ENV_FILE=/etc/wb-stocks.env
+      DEPLOY_DIR="${APP_DIR}/deploy/gcp"
+      NODE_MAJOR=22
+
+      # ----- 1. Packages -------------------------------------------------------
+      log "Installing OS packages"
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update -y
+      apt-get install -y --no-install-recommends \
+        ca-certificates curl gnupg git build-essential python3 \
+        sqlite3 nginx jq xfsprogs
+
+      if ! command -v node >/dev/null || [[ "$(node -v 2>/dev/null)" != v${NODE_MAJOR}.* ]]; then
+        log "Installing Node ${NODE_MAJOR} from NodeSource"
+        curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -
+        apt-get install -y nodejs
+      fi
+
+      if ! command -v pnpm >/dev/null; then
+        log "Installing pnpm"
+        npm install -g pnpm@10.6.5
+      fi
+
+      # Ops Agent for logs/metrics → Cloud Logging / Monitoring.
+      if ! systemctl list-unit-files | grep -q '^google-cloud-ops-agent'; then
+        log "Installing Ops Agent"
+        curl -fsSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
+        bash add-google-cloud-ops-agent-repo.sh --also-install
+        rm -f add-google-cloud-ops-agent-repo.sh
+      fi
+
+      # ----- 2. Data disk ------------------------------------------------------
+      DEV=/dev/disk/by-id/google-wb-stocks-data
+      if [[ ! -e "$DEV" ]]; then
+        log "FATAL: data disk $DEV not attached"
+        exit 1
+      fi
+      if ! blkid "$DEV" >/dev/null 2>&1; then
+        log "Formatting data disk (first boot) as ext4"
+        mkfs.ext4 -F -L wb-stocks-data "$DEV"
+      fi
+      mkdir -p "$DATA_DIR"
+      if ! grep -q "$DATA_DIR" /etc/fstab; then
+        echo "LABEL=wb-stocks-data $DATA_DIR ext4 defaults,nofail,discard 0 2" >> /etc/fstab
+      fi
+      mount -a
+      chown -R wbstocks:wbstocks /srv/wb-stocks
+
+      # ----- 3. Code -----------------------------------------------------------
+      mkdir -p "$APP_DIR"
+      chown wbstocks:wbstocks "$APP_DIR"
+      if [[ ! -d "${APP_DIR}/.git" ]]; then
+        log "Cloning $REPO_URL"
+        sudo -u wbstocks git clone "$REPO_URL" "$APP_DIR"
+      fi
+      sudo -u wbstocks git -C "$APP_DIR" fetch --all --tags --prune
+      sudo -u wbstocks git -C "$APP_DIR" checkout "$GIT_REF"
+      sudo -u wbstocks git -C "$APP_DIR" pull --ff-only origin "$GIT_REF" || true
+
+      # The wb-stocks package lives at repo_root/wb-stocks/.
+      WB_DIR="${APP_DIR}/wb-stocks"
+      if [[ ! -d "$WB_DIR" ]]; then
+        # Repo layout might place package at the root; fall back to APP_DIR.
+        WB_DIR="$APP_DIR"
+      fi
+      ln -sfn "$WB_DIR" /srv/wb-stocks/current
+
+      log "Installing dependencies"
+      sudo -u wbstocks --preserve-env=PATH \
+        bash -c "cd '$WB_DIR' && pnpm install --frozen-lockfile"
+
+      log "Building forecast UI bundle"
+      sudo -u wbstocks --preserve-env=PATH \
+        bash -c "cd '$WB_DIR' && pnpm build:forecast-ui-client"
+
+      # SQLite file lives on the data disk; the .env points there.
+      mkdir -p "$DATA_DIR"
+      chown wbstocks:wbstocks "$DATA_DIR"
+
+      # ----- 4. Secrets --------------------------------------------------------
+      log "Fetching secrets"
+      "${DEPLOY_DIR}/scripts/fetch-secrets.sh" "$ENV_FILE" "$DATA_DIR"
+
+      # ----- 5. nginx ----------------------------------------------------------
+      install -m 0644 "${DEPLOY_DIR}/nginx/forecast-ui.conf" \
+        /etc/nginx/sites-available/forecast-ui.conf
+      ln -sfn /etc/nginx/sites-available/forecast-ui.conf \
+        /etc/nginx/sites-enabled/forecast-ui.conf
+      rm -f /etc/nginx/sites-enabled/default
+      nginx -t
+      systemctl enable --now nginx
+      systemctl reload nginx
+
+      # ----- 6. systemd units --------------------------------------------------
+      log "Installing systemd units"
+      install -m 0644 "${DEPLOY_DIR}/systemd/"*.service /etc/systemd/system/
+      install -m 0644 "${DEPLOY_DIR}/systemd/"*.timer   /etc/systemd/system/
+      systemctl daemon-reload
+
+      systemctl enable --now forecast-ui.service
+      for unit in wb-import-stocks.timer wb-update-supplies.timer \
+                  wb-update-tariffs.timer wb-forecast-recalc.timer; do
+        systemctl enable --now "$unit"
+      done
+
+      log "Bootstrap complete"
+
+runcmd:
+  - [ bash, -lc, "/usr/local/sbin/wb-stocks-bootstrap.sh 2>&1 | tee -a /var/log/wb-stocks-bootstrap.log" ]

@@ -1,0 +1,25 @@
+[Unit]
+Description=wb-stocks: update WB warehouse tariffs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=wbstocks
+Group=wbstocks
+WorkingDirectory=/srv/wb-stocks/current
+TimeoutStartSec=30min
+ExecStart=/usr/bin/node --env-file=/etc/wb-stocks.env --import tsx scripts/update-wb-tariffs.ts
+Nice=15
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/wb-stocks/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+StandardOutput=journal
+StandardError=journal

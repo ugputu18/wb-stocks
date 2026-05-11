@@ -1,0 +1,12 @@
+[Unit]
+Description=wb-stocks: weekly WB tariffs sync
+
+[Timer]
+# Mondays at 02:30 UTC; tariffs change rarely so once a week is enough.
+OnCalendar=Mon *-*-* 02:30:00
+Persistent=true
+RandomizedDelaySec=15min
+Unit=wb-update-tariffs.service
+
+[Install]
+WantedBy=timers.target

@@ -60,34 +60,29 @@ describe("справочник", () => {
 
 describe("isWarehouseMacroCompatibleWithTargetMacro", () => {
   it("совпадение строки", () => {
-    expect(isWarehouseMacroCompatibleWithTargetMacro("Сибирский", "Сибирский")).toBe(true);
-  });
-
-  it("Сибирский ↔ Сибирский и Дальневосточный (кластер)", () => {
     expect(
       isWarehouseMacroCompatibleWithTargetMacro(
         "Сибирский и Дальневосточный",
-        "Сибирский",
+        "Сибирский и Дальневосточный",
       ),
     ).toBe(true);
-    expect(
-      isWarehouseMacroCompatibleWithTargetMacro("Сибирский", "Сибирский и Дальневосточный"),
-    ).toBe(true);
   });
 
-  it("Дальневосточный в том же кластере", () => {
+  it("разные макрорегионы — false", () => {
     expect(
-      isWarehouseMacroCompatibleWithTargetMacro("Сибирский и Дальневосточный", "Дальневосточный"),
-    ).toBe(true);
-  });
-
-  it("разные кластеры — false", () => {
-    expect(isWarehouseMacroCompatibleWithTargetMacro("Приволжский", "Сибирский")).toBe(false);
+      isWarehouseMacroCompatibleWithTargetMacro(
+        "Приволжский",
+        "Сибирский и Дальневосточный",
+      ),
+    ).toBe(false);
   });
 
   it("не сопоставлен — false", () => {
     expect(
-      isWarehouseMacroCompatibleWithTargetMacro(UNMAPPED_WAREHOUSE_REGION_LABEL, "Сибирский"),
+      isWarehouseMacroCompatibleWithTargetMacro(
+        UNMAPPED_WAREHOUSE_REGION_LABEL,
+        "Сибирский и Дальневосточный",
+      ),
     ).toBe(false);
   });
 
@@ -109,8 +104,20 @@ describe("isWarehouseMacroCompatibleWithTargetMacro", () => {
 describe("shouldSkipRedistributionDonorVsTargetMacro", () => {
   it("пропуск только при строгом совпадении макрорегионов", () => {
     expect(shouldSkipRedistributionDonorVsTargetMacro("Приволжский", "Приволжский")).toBe(true);
-    expect(shouldSkipRedistributionDonorVsTargetMacro("Сибирский и Дальневосточный", "Сибирский")).toBe(
-      false,
-    );
+    expect(
+      shouldSkipRedistributionDonorVsTargetMacro(
+        "Сибирский и Дальневосточный",
+        "Приволжский",
+      ),
+    ).toBe(false);
+  });
+
+  it("Сибирь и Дальний Восток теперь один лейбл — донор-Новосибирск → цель-Красноярск скипается как внутрирегиональный", () => {
+    expect(
+      shouldSkipRedistributionDonorVsTargetMacro(
+        "Сибирский и Дальневосточный",
+        "Сибирский и Дальневосточный",
+      ),
+    ).toBe(true);
   });
 });

@@ -839,7 +839,7 @@ pnpm typecheck       # tsc --noEmit
 Ключевые инварианты (подробно и с мотивацией):
 
 - **Макрорегион** — агрегация/анализ; **склад** — исполнение. Preferred и candidates строятся из **execution targets** (реестр + hard filters).
-- **Сибирский кластер** в `WB_MACRO_REGION_REDISTRIBUTION_COMPATIBILITY_GROUPS` совместим для подбора строк сети в целевом макро; **skip донор vs цель** остаётся по **строгому равенству** строк макрорегиона (`shouldSkipRedistributionDonorVsTargetMacro`).
+- **Сибирь и Дальний Восток** — единый макрорегион `Сибирский и Дальневосточный` (как в WB-кабинете): Новосибирск/Красноярск/Иркутск/Хабаровск/Владивосток/… в одной строке. Все группы в `WB_MACRO_REGION_REDISTRIBUTION_COMPATIBILITY_GROUPS` теперь из одного элемента; **skip донор vs цель** — по **строгому равенству** строк макрорегиона (`shouldSkipRedistributionDonorVsTargetMacro`). Исторически было три раздельных лейбла + расширенный сибирский кластер — это давало «межрегиональные» пары вроде донор-Новосибирск → цель-Красноярск, что логистически было одним регионом.
 - **Страны СНГ** в перераспределении — только «сам с собой», без перекрёстной совместимости; витрина **`cis`** в `WB_MACRO_REGION_CLUSTERS` — для аудита, не для правил candidate-групп.
 - Разделяем **`hasCandidateWarehouses`** (есть macro-compatible строки сети) и **`hasExecutionTargets`** / **`executionTargetCount`** (есть склады, куда по реестру можно исполнять).
 - Региональные суммы и подсказки «здоровья региона» (`sumRecommendedToWBInRegion`, `regionMinDaysOfStockHint`) считаются по **`availabilityContributors`**, не по «всем строкам подряд».

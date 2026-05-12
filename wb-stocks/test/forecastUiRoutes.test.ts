@@ -25,7 +25,6 @@ describe("forecast UI routes (shared with server re-export)", () => {
     expect(isKnownForecastRoute("/regional-stocks")).toBe(true);
     expect(isKnownForecastRoute("/warehouse-region-audit")).toBe(true);
     expect(isKnownForecastRoute("/regional-demand-diagnostics")).toBe(true);
-    expect(isKnownForecastRoute("/legacy")).toBe(false);
     expect(isKnownForecastRoute("/api/forecast/rows")).toBe(false);
   });
 

@@ -259,6 +259,83 @@ export async function downloadForecastCsv(
   URL.revokeObjectURL(a.href);
 }
 
+export interface UploadOwnStocksResponse {
+  ok: true;
+  snapshotDate: string;
+  warehouseCode: string;
+  sourceFile: string;
+  fetched: number;
+  skipped: number;
+  inserted: number;
+  wasUpdate: boolean;
+  durationMs: number;
+  detection: {
+    vendorColumn: string | null;
+    wbColumn: string | null;
+    quantityColumn: string | null;
+    delimiter: string;
+  };
+  issues: Array<{ lineNumber: number; reason: string; raw: unknown }>;
+}
+
+export interface UploadOwnStocksParams {
+  /** Snapshot date `YYYY-MM-DD`; defaults to today (server-local) on the backend. */
+  date?: string;
+  /** Warehouse code; defaults to `main` on the backend. */
+  warehouse?: string;
+}
+
+/**
+ * Upload an "our warehouse" stocks CSV to the forecast UI server. Column
+ * meanings are auto-detected on the server (see `parseOwnStockCsv`).
+ */
+export async function uploadOwnStocksCsv(
+  file: File,
+  params: UploadOwnStocksParams,
+  token?: string,
+): Promise<UploadOwnStocksResponse> {
+  const sp = new URLSearchParams();
+  sp.set("filename", file.name);
+  if (params.date) sp.set("date", params.date);
+  if (params.warehouse) sp.set("warehouse", params.warehouse);
+  const headers: Record<string, string> = {
+    "Content-Type": "text/csv; charset=utf-8",
+    Accept: "application/json",
+  };
+  if (token?.trim()) {
+    headers.Authorization = `Bearer ${token.trim()}`;
+  }
+  let res: Response;
+  try {
+    res = await fetch(`/api/forecast/upload-own-stocks?${sp.toString()}`, {
+      method: "POST",
+      headers,
+      body: file,
+    });
+  } catch (err) {
+    throw humanFetchError(err);
+  }
+  const text = await res.text();
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    throw new Error(
+      `Ответ сервера не JSON (код ${res.status}). Проверьте URL и что поднят forecast UI.`,
+    );
+  }
+  if (!res.ok) {
+    const d = data as { error?: string } | null;
+    const msg =
+      (d && typeof d.error === "string" && d.error) ||
+      (res.status === 401
+        ? "Нужен заголовок авторизации: введите Bearer-токен (FORECAST_UI_TOKEN)."
+        : res.statusText || "Ошибка загрузки");
+    throw new ForecastApiError(msg, res.status);
+  }
+  return data as UploadOwnStocksResponse;
+}
+
 export interface RecalculateBody {
   snapshotDate: string;
   horizons: number[];

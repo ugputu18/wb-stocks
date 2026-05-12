@@ -97,8 +97,6 @@ export function App() {
           <a href={FORECAST_UI_SPA_ROUTES.redistribution}>Перемещение между складами WB</a>
           {" · "}
           <a href={FORECAST_UI_SPA_ROUTES.regionalDemandDiagnostics}>Регион vs fulfillment</a>
-          {" · "}
-          Старый экран (reference): <a href="/legacy">/legacy</a>
         </p>
       </header>
 
@@ -123,6 +121,7 @@ export function App() {
         onRecalculate={actions.runRecalculate}
         onExportWb={actions.runExportWb}
         onExportSupplier={actions.runExportSupplier}
+        onUploadOwnStocks={actions.runUploadOwnStocks}
       />
 
       <StatusBar

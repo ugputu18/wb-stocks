@@ -14,7 +14,6 @@
 **Что доступно без каких-либо токенов**
 
 - **Основной UI (Preact):** кастомные пути SPA (тот же `public/forecast-ui-next/index.html`): константы и `isKnownForecastRoute` — **`forecast-ui-client/src/routes.ts`** (реэкспорт из **`src/forecastUiRoutes.ts`**, общий с сервером). Пути: **`/`**, **`/redistribution`**, **`/warehouse-region-audit`**, **`/regional-demand-diagnostics`** (с завершающим `/` или без); JS/CSS сборки — **`/next/assets/*`** (Vite `base: /next/`).
-- **Legacy UI (vanilla, fallback / сравнение):** `GET /legacy` или **`/legacy/`** → `public/forecast-ui/index.html`; его статика — **`/static/*`** (`styles.css`, `app.js`).
 - Редирект **`/next` → `/`** (query string сохраняется) — для старых закладок; статика по-прежнему **`/next/...`**.
 - Если **`FORECAST_UI_TOKEN` не задан**: все **`/api/*`** доступны без заголовка (имеет смысл только на localhost).
 - **`GET /api/forecast/*`** (health, warehouse-keys, rows, summary, supplier-replenishment, export CSV) читают только SQLite — **`WB_TOKEN` не нужен**.
@@ -37,13 +36,13 @@
 pnpm serve:forecast-ui
 ```
 
-Открыть в браузере: **`http://127.0.0.1:3847/`** — основной интерфейс; **`http://127.0.0.1:3847/legacy`** — старый экран (хост/порт см. `FORECAST_UI_*` в `.env`).
+Открыть в браузере: **`http://127.0.0.1:3847/`** — основной (и единственный) интерфейс (хост/порт см. `FORECAST_UI_*` в `.env`).
 
 **Сборка Preact:** из `wb-stocks` выполнить `pnpm build:forecast-ui-client` (иначе `GET /` вернёт `503` с текстом про отсутствующую сборку).
 
 ### Состояние фильтров в адресной строке (без SPA-роутера)
 
-И **основной**, и **legacy** UI используют одни и те же имена query-параметров, что и API. При **первой загрузке** и при **Назад/Вперёд** (`popstate`) состояние формы восстанавливается из **`location.search`**. После **успешной** загрузки таблицы и сводки URL обновляется через **`history.replaceState`** (без перезагрузки, без засорения истории на каждый чих). Исключение: **drilldown** из режима «WB в целом» в «По складам» — **`history.pushState`**, чтобы **Назад** возвращала к предыдущему виду/фильтру. Путь страницы (`/` или `/legacy`) на query не влияет — можно вручную сравнить два UI с одним и тем же `?viewMode=...`.
+UI использует те же имена query-параметров, что и API. При **первой загрузке** и при **Назад/Вперёд** (`popstate`) состояние формы восстанавливается из **`location.search`**. После **успешной** загрузки таблицы и сводки URL обновляется через **`history.replaceState`** (без перезагрузки, без засорения истории на каждый чих). Исключение: **drilldown** из режима «WB в целом» в «По складам» — **`history.pushState`**, чтобы **Назад** возвращала к предыдущему виду/фильтру.
 
 **В URL сериализуются:** `viewMode`, `snapshotDate`, `horizonDays`, `warehouseKey`, `q`, `techSize`, `riskStockout`, `replenishmentMode`, `targetCoverageDays`, `ownWarehouseCode`, `limit`, `leadTimeDays`, `coverageDays`, `safetyDays`, опционально **`systemQuickFilter`** (только для `viewMode=systemTotal`, если не `all`). Пустой/некорректный параметр → мягкий fallback на дефолт UI. **`apiToken` (FORECAST_UI_TOKEN)** в query **не** записывается и в URL **не** попадает (как и раньше — только заголовок при запросах к API).
 

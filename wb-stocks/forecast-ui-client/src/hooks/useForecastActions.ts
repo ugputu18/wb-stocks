@@ -1,5 +1,9 @@
 import { useCallback, useState } from "preact/hooks";
-import { downloadForecastCsv, postForecastRecalculate } from "../api/client.js";
+import {
+  downloadForecastCsv,
+  postForecastRecalculate,
+  uploadOwnStocksCsv,
+} from "../api/client.js";
 import {
   toSummaryRowsSearchParams,
   toSupplierSearchParams,
@@ -8,7 +12,12 @@ import {
 import { isStale, type LoadResult } from "../utils/forecastLoadMessage.js";
 import { syncUrlReplace } from "../utils/forecastUrlSync.js";
 
-export type ActionBusy = null | "recalculate" | "export-wb" | "export-supplier";
+export type ActionBusy =
+  | null
+  | "recalculate"
+  | "export-wb"
+  | "export-supplier"
+  | "upload-own-stocks";
 
 function fallbackWbCsvName(snapshotDate: string, horizonDays: string): string {
   return `wb-replenishment-${snapshotDate}-h${horizonDays}.csv`;
@@ -108,10 +117,58 @@ export function useForecastActions(params: UseForecastActionsParams) {
     }
   }, [form, apiToken, clearQDebounce, setStatusLine, setStatusTone]);
 
+  const runUploadOwnStocks = useCallback(
+    async (file: File) => {
+      setActionBusy("upload-own-stocks");
+      setStatusTone("default");
+      setStatusLine(`Загрузка остатков из «${file.name}»…`);
+      try {
+        const warehouse = form.ownWarehouseCode.trim();
+        const result = await uploadOwnStocksCsv(
+          file,
+          {
+            date: form.snapshotDate,
+            warehouse: warehouse ? warehouse : undefined,
+          },
+          apiToken,
+        );
+        const det = result.detection;
+        const cols = [
+          det.vendorColumn ? `vendor=«${det.vendorColumn}»` : null,
+          det.wbColumn ? `WB=«${det.wbColumn}»` : null,
+          det.quantityColumn ? `остаток=«${det.quantityColumn}»` : null,
+        ]
+          .filter(Boolean)
+          .join(", ");
+        const summary =
+          `Остатки загружены: ${result.inserted} строк ` +
+          `(пропущено ${result.skipped}, ${
+            result.wasUpdate ? "обновлено" : "создано"
+          } за ${result.snapshotDate}` +
+          `${cols ? `; колонки: ${cols}` : ""}).`;
+        setStatusTone("default");
+        setStatusLine(summary);
+        const r = await reload(form, apiToken);
+        if (!r.ok && !isStale(r) && "message" in r) {
+          setStatusTone("error");
+          setStatusLine("Загрузка остатков: " + r.message);
+        }
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        setStatusTone("error");
+        setStatusLine("Загрузка остатков: " + m);
+      } finally {
+        setActionBusy(null);
+      }
+    },
+    [form, apiToken, reload, setStatusLine, setStatusTone],
+  );
+
   return {
     actionBusy,
     runRecalculate,
     runExportWb,
     runExportSupplier,
+    runUploadOwnStocks,
   };
 }

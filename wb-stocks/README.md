@@ -29,18 +29,23 @@ and [`docs/redistribution-read-model.md`](./docs/redistribution-read-model.md).
 
 ## Requirements
 
-- Node.js **20.6+** (tested on 22). The CLI uses the built-in
+- Node.js **20.6+** (project pins **22.21.1**). The CLI uses the built-in
   `node --env-file=.env` flag for loading `.env`, no dotenv dependency.
 - `pnpm`.
 
-A `.nvmrc` pointing at `22` is included; `nvm use` inside the module picks
-the correct version.
+Node version is pinned in **two** places:
+
+- `.nvmrc` (`22`) — for humans / CI using `nvm use`.
+- `.npmrc` (`use-node-version=22.21.1`) — pnpm itself downloads and uses
+  this exact Node for every `pnpm install` / `pnpm run …` / `pnpm exec …`,
+  independently of the system `node` on `PATH`. This avoids the classic
+  `NODE_MODULE_VERSION` mismatch on `better-sqlite3` when the shell is not
+  running `nvm use 22`.
 
 ## Quick start
 
 ```bash
-nvm use                                 # -> Node 22 (per .nvmrc)
-pnpm install
+pnpm install                            # downloads Node 22.21.1 via pnpm
 cp .env.example .env                    # fill in WB_TOKEN (only needed for WB)
 
 # WB warehouses current state:
@@ -126,6 +131,14 @@ Trailing `warn` lines like
 `Own warehouse import: row skipped … reason: missing "Артикул"` are **normal**
 — operator CSVs usually end with blank rows and a totals row
 (e.g. `43,157 pcs`). They appear in `skipped` and are not errors.
+
+The forecast UI also exposes a one-click **«Загрузить остатки CSV»** button
+on the main page (next to **«Скачать WB CSV»** / **«Скачать Supplier CSV»**)
+that hits `POST /api/forecast/upload-own-stocks` and reuses the same parser
+and `replaceForDate` semantics. Column names may differ — they are
+auto-detected by header keyword (`артикул` / `остаток`) and content of the
+first rows (a 6–10-digit value classifies the column as the WB article).
+See [`docs/ai-tasks/own-stocks-csv-upload.md`](./docs/ai-tasks/own-stocks-csv-upload.md).
 
 ## Troubleshooting
 

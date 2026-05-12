@@ -1,5 +1,5 @@
 /**
- * Светлая тема forecast UI (Preact). Legacy на /legacy по-прежнему использует public/forecast-ui/styles.css.
+ * Светлая тема forecast UI (Preact). Единственный экран — Preact SPA на `/`.
  */
 :root {
   /* Базовая палитра (Canpol-like: бирюза + нейтрали) */

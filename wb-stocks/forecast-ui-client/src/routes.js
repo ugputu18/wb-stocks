@@ -28,7 +28,7 @@ export function normalizeForecastUiPathname(pathname) {
         return "/";
     return t.replace(/\/+$/, "") || "/";
 }
-/** `true` для `/` и известных кастомных страниц forecast UI (не `/legacy`, не `/api`). */
+/** `true` для `/` и известных кастомных страниц forecast UI (не `/api`). */
 export function isKnownForecastRoute(pathname) {
     const p = normalizeForecastUiPathname(pathname);
     if (p === HOME_ROUTE)

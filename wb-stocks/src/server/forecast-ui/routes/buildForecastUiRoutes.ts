@@ -6,6 +6,7 @@ import { createForecastReadRoutes } from "../handlers/forecastReadRoutes.js";
 import { createHealthRoute } from "../handlers/healthRoute.js";
 import { createRecalculateRoute } from "../handlers/recalculateRoute.js";
 import { createSpaStaticRoutes } from "../handlers/spaStaticRoutes.js";
+import { createUploadOwnStocksRoute } from "../handlers/uploadOwnStocksRoute.js";
 import type { ForecastRouteMatch } from "./routeTypes.js";
 
 /** SPA + static + health — без `WbForecastSnapshotRepository` (как раньше до строки с `forecastRepo`). */
@@ -25,5 +26,6 @@ export function buildForecastUiApiRoutes(
     ...createDiagnosticsRoutes(apiDeps),
     ...createExportRoutes(apiDeps),
     createRecalculateRoute(ctx),
+    createUploadOwnStocksRoute(ctx),
   ];
 }

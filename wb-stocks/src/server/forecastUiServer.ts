@@ -6,7 +6,7 @@ import {
   buildForecastUiApiRoutes,
   buildForecastUiSpaHealthRoutes,
 } from "./forecast-ui/routes/buildForecastUiRoutes.js";
-import { STATIC_DIR, STATIC_DIR_NEXT } from "./forecast-ui/staticPaths.js";
+import { STATIC_DIR_NEXT } from "./forecast-ui/staticPaths.js";
 import type { ForecastUiServerCtx } from "./forecast-ui/forecastUiServerCtx.js";
 
 export type { ForecastUiServerCtx } from "./forecast-ui/forecastUiServerCtx.js";
@@ -66,7 +66,6 @@ export function startForecastUiServer(ctx: ForecastUiServerCtx): ReturnType<
       {
         host: cfg.FORECAST_UI_HOST,
         port: cfg.FORECAST_UI_PORT,
-        static: STATIC_DIR,
         staticNext: STATIC_DIR_NEXT,
       },
       "Forecast UI server listening",

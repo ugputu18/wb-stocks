@@ -6,7 +6,11 @@ import {
   DEFAULT_WAREHOUSE_CODE,
   type OwnStockSnapshotRecord,
 } from "../domain/ownStockSnapshot.js";
-import { parseOwnStockCsv } from "./parseOwnStockCsv.js";
+import {
+  parseOwnStockCsv,
+  type OwnStockCsvDetection,
+  type OwnStockCsvParseIssue,
+} from "./parseOwnStockCsv.js";
 
 export interface ImportOwnWarehouseStateDeps {
   repository: OwnStockSnapshotRepository;
@@ -41,6 +45,10 @@ export interface ImportOwnWarehouseStateResult {
   inserted: number;
   wasUpdate: boolean;
   durationMs: number;
+  /** Auto-detected column meanings (see `parseOwnStockCsv`). */
+  detection: OwnStockCsvDetection;
+  /** Per-row parse issues; same shape as `parseOwnStockCsv` issues. */
+  issues: OwnStockCsvParseIssue[];
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -85,7 +93,7 @@ export async function importOwnWarehouseState(
   const wasUpdate = existing > 0;
 
   const buf = await read(sourceFile);
-  const { rows, issues } = parseOwnStockCsv(buf);
+  const { rows, issues, detection } = parseOwnStockCsv(buf);
 
   for (const issue of issues) {
     logger.warn(
@@ -136,6 +144,8 @@ export async function importOwnWarehouseState(
     inserted,
     wasUpdate,
     durationMs,
+    detection,
+    issues,
   };
 }
 

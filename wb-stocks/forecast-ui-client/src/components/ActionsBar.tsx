@@ -49,9 +49,9 @@ export function ActionsBar(props: ActionsBarProps): JSX.Element {
             disabled={uiBlocked || totalRowsKpi === 0}
             onClick={() => void onExportWb()}
           >
-            {actionBusy === "export-wb" ? "Экспорт…" : "Скачать WB CSV"}
+            {actionBusy === "export-wb" ? "Экспорт…" : "Скачать WB Excel"}
           </button>
-          <ActionHint>Выгружает текущую таблицу поставок на WB</ActionHint>
+          <ActionHint>Выгружает текущую таблицу поставок на WB (XLSX)</ActionHint>
         </div>
         <div class="action-with-hint">
           <button
@@ -59,9 +59,9 @@ export function ActionsBar(props: ActionsBarProps): JSX.Element {
             disabled={uiBlocked || supCount === 0}
             onClick={() => void onExportSupplier()}
           >
-            {actionBusy === "export-supplier" ? "Экспорт…" : "Скачать Supplier CSV"}
+            {actionBusy === "export-supplier" ? "Экспорт…" : "Скачать Supplier Excel"}
           </button>
-          <ActionHint>Выгружает текущий список закупки у производителя</ActionHint>
+          <ActionHint>Выгружает текущий список закупки у производителя (XLSX)</ActionHint>
         </div>
         <div class="action-with-hint">
           <button

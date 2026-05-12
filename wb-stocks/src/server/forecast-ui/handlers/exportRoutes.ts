@@ -1,35 +1,43 @@
-import { toCsv } from "../../csv.js";
+import { toXlsxBuffer } from "../../xlsx.js";
 import type { ForecastReportFilter } from "../../../infra/wbForecastSnapshotRepository.js";
 import { json } from "../http/json.js";
-import { sendCsvAttachment } from "../http/sendCsvAttachment.js";
+import { sendXlsxAttachment } from "../http/sendXlsxAttachment.js";
 import { parseQuery, parseRegionalStocksQuery } from "../parse/forecastQuery.js";
 import { parseRequiredTargetCoverageDays } from "../parse/exportQuery.js";
 import { loadRegionalStocksReport } from "../queries/loadRegionalStocksReport.js";
 import {
-  forecastSupplierCsvFilename,
-  forecastWbCsvFilename,
+  forecastSupplierXlsxFilename,
+  forecastWbXlsxFilename,
   REGIONAL_STOCKS_EXPORT_COLUMNS,
-  regionalStocksCsvFilename,
-  regionalStocksRowsToCsvObjects,
-  supplierRowsToCsvObjects,
+  regionalStocksXlsxFilename,
+  regionalStocksRowsToExportObjects,
+  supplierRowsToExportObjects,
   SUPPLIER_EXPORT_COLUMNS,
   SYSTEM_TOTAL_EXPORT_COLUMNS,
-  wbReportRowsToCsvObjects,
+  wbReportRowsToExportObjects,
   WB_EXPORT_COLUMNS,
-  wbTotalRowsToCsvObjects,
+  wbTotalRowsToExportObjects,
   WB_TOTAL_EXPORT_COLUMNS,
-  systemTotalRowsToCsvObjects,
-} from "../csv/forecastExportMappers.js";
+  systemTotalRowsToExportObjects,
+} from "../export/forecastExportMappers.js";
 import type { ForecastUiHandlerDeps } from "../types.js";
 import type { ForecastRouteMatch } from "../routes/routeTypes.js";
 
+/**
+ * Экспорт прогнозных отчётов в XLSX.
+ *
+ * Ранее тут отдавали CSV, но из-за локалезависимого парсинга чисел и
+ * длинных `nm_id` оператор каждый раз чинил формат руками в Excel.
+ * `toXlsxBuffer` сохраняет JS-`number` как настоящие числовые ячейки,
+ * поэтому открытие в любой локали выглядит одинаково.
+ */
 export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMatch[] {
   const { forecastReportQuery } = deps;
 
   return [
     {
       match: (req, url) => req.method === "GET" && url.pathname === "/api/forecast/export-wb",
-      handle: (req, res, url) => {
+      handle: async (req, res, url) => {
         void req;
         const q = parseQuery(url);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(q.snapshotDate) || !Number.isInteger(q.horizonDays) || q.horizonDays <= 0) {
@@ -50,10 +58,10 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
           viewMode: q.viewMode,
           systemTotalQuickFilter: q.systemTotalQuickFilter,
         };
-        const csv =
+        const buffer =
           q.viewMode === "wbWarehouses"
-            ? toCsv(
-                wbReportRowsToCsvObjects(
+            ? await toXlsxBuffer(
+                wbReportRowsToExportObjects(
                   forecastReportQuery.listReportRows(
                     q.snapshotDate,
                     q.horizonDays,
@@ -62,10 +70,11 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
                   ),
                 ),
                 [...WB_EXPORT_COLUMNS],
+                { sheetName: "WB replenishment" },
               )
             : q.viewMode === "systemTotal"
-              ? toCsv(
-                  systemTotalRowsToCsvObjects(
+              ? await toXlsxBuffer(
+                  systemTotalRowsToExportObjects(
                     forecastReportQuery.listSystemTotalBySkuReportRows(
                       q.snapshotDate,
                       q.horizonDays,
@@ -74,9 +83,10 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
                     ),
                   ),
                   [...SYSTEM_TOTAL_EXPORT_COLUMNS],
+                  { sheetName: "System total" },
                 )
-              : toCsv(
-                  wbTotalRowsToCsvObjects(
+              : await toXlsxBuffer(
+                  wbTotalRowsToExportObjects(
                     forecastReportQuery.listWbTotalBySkuReportRows(
                       q.snapshotDate,
                       q.horizonDays,
@@ -85,18 +95,19 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
                     ),
                   ),
                   [...WB_TOTAL_EXPORT_COLUMNS],
+                  { sheetName: "WB total" },
                 );
-        sendCsvAttachment(
+        sendXlsxAttachment(
           res,
-          forecastWbCsvFilename(q.snapshotDate, q.horizonDays),
-          csv,
+          forecastWbXlsxFilename(q.snapshotDate, q.horizonDays),
+          buffer,
         );
       },
     },
     {
       match: (req, url) =>
         req.method === "GET" && url.pathname === "/api/forecast/export-supplier",
-      handle: (req, res, url) => {
+      handle: async (req, res, url) => {
         void req;
         const q = parseQuery(url);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(q.snapshotDate) || !Number.isInteger(q.horizonDays) || q.horizonDays <= 0) {
@@ -129,14 +140,15 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
           supplierFilter,
           tc,
         );
-        const csv = toCsv(
-          supplierRowsToCsvObjects(supplierRows, tc),
+        const buffer = await toXlsxBuffer(
+          supplierRowsToExportObjects(supplierRows, tc),
           [...SUPPLIER_EXPORT_COLUMNS],
+          { sheetName: "Supplier" },
         );
-        sendCsvAttachment(
+        sendXlsxAttachment(
           res,
-          forecastSupplierCsvFilename(q.snapshotDate, q.horizonDays),
-          csv,
+          forecastSupplierXlsxFilename(q.snapshotDate, q.horizonDays),
+          buffer,
         );
       },
     },
@@ -147,7 +159,7 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
       match: (req, url) =>
         req.method === "GET" &&
         url.pathname === "/api/forecast/export-regional-stocks",
-      handle: (req, res, url) => {
+      handle: async (req, res, url) => {
         void req;
         const q = parseRegionalStocksQuery(url);
         if (!q.ok) {
@@ -165,18 +177,19 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
         const filteredRows = outcome.report.rows.filter(
           (r) => r.recommendedOrderQty > 0,
         );
-        const csv = toCsv(
-          regionalStocksRowsToCsvObjects(filteredRows),
+        const buffer = await toXlsxBuffer(
+          regionalStocksRowsToExportObjects(filteredRows),
           [...REGIONAL_STOCKS_EXPORT_COLUMNS],
+          { sheetName: "Regional stocks" },
         );
-        sendCsvAttachment(
+        sendXlsxAttachment(
           res,
-          regionalStocksCsvFilename(
+          regionalStocksXlsxFilename(
             outcome.report.snapshotDate,
             outcome.report.horizonDays,
             outcome.report.macroRegion,
           ),
-          csv,
+          buffer,
         );
       },
     },

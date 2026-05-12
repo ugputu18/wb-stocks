@@ -1,6 +1,6 @@
 import { useCallback, useState } from "preact/hooks";
 import {
-  downloadForecastCsv,
+  downloadForecastFile,
   postForecastRecalculate,
   uploadOwnStocksCsv,
 } from "../api/client.js";
@@ -19,12 +19,12 @@ export type ActionBusy =
   | "export-supplier"
   | "upload-own-stocks";
 
-function fallbackWbCsvName(snapshotDate: string, horizonDays: string): string {
-  return `wb-replenishment-${snapshotDate}-h${horizonDays}.csv`;
+function fallbackWbXlsxName(snapshotDate: string, horizonDays: string): string {
+  return `wb-replenishment-${snapshotDate}-h${horizonDays}.xlsx`;
 }
 
-function fallbackSupplierCsvName(snapshotDate: string, horizonDays: string): string {
-  return `supplier-replenishment-${snapshotDate}-h${horizonDays}.csv`;
+function fallbackSupplierXlsxName(snapshotDate: string, horizonDays: string): string {
+  return `supplier-replenishment-${snapshotDate}-h${horizonDays}.xlsx`;
 }
 
 interface UseForecastActionsParams {
@@ -77,16 +77,16 @@ export function useForecastActions(params: UseForecastActionsParams) {
     setActionBusy("export-wb");
     clearQDebounce();
     setStatusTone("default");
-    setStatusLine("Экспорт WB CSV…");
+    setStatusLine("Экспорт WB Excel…");
     try {
       const p = toSummaryRowsSearchParams(form).toString();
-      await downloadForecastCsv(
+      await downloadForecastFile(
         `/api/forecast/export-wb?${p}`,
         apiToken,
-        fallbackWbCsvName(form.snapshotDate, form.horizonDays),
+        fallbackWbXlsxName(form.snapshotDate, form.horizonDays),
       );
       setStatusTone("default");
-      setStatusLine("CSV скачан (WB).");
+      setStatusLine("Excel скачан (WB).");
     } catch (e) {
       setStatusTone("error");
       setStatusLine("Ошибка: " + (e instanceof Error ? e.message : String(e)));
@@ -99,16 +99,16 @@ export function useForecastActions(params: UseForecastActionsParams) {
     setActionBusy("export-supplier");
     clearQDebounce();
     setStatusTone("default");
-    setStatusLine("Экспорт Supplier CSV…");
+    setStatusLine("Экспорт Supplier Excel…");
     try {
       const p = toSupplierSearchParams(form).toString();
-      await downloadForecastCsv(
+      await downloadForecastFile(
         `/api/forecast/export-supplier?${p}`,
         apiToken,
-        fallbackSupplierCsvName(form.snapshotDate, form.horizonDays),
+        fallbackSupplierXlsxName(form.snapshotDate, form.horizonDays),
       );
       setStatusTone("default");
-      setStatusLine("CSV скачан (supplier).");
+      setStatusLine("Excel скачан (supplier).");
     } catch (e) {
       setStatusTone("error");
       setStatusLine("Ошибка: " + (e instanceof Error ? e.message : String(e)));

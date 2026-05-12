@@ -1,7 +1,7 @@
 import type { JSX } from "preact";
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import {
-  downloadForecastCsv,
+  downloadForecastFile,
   fetchRegionalStocks,
   fetchWarehouseTariffs,
   ForecastApiError,
@@ -239,7 +239,7 @@ export function RegionalStocksPage(): JSX.Element {
     }
   }, [sp]);
 
-  const exportCsv = useCallback(async () => {
+  const exportXlsx = useCallback(async () => {
     setExporting(true);
     setError(null);
     try {
@@ -251,10 +251,10 @@ export function RegionalStocksPage(): JSX.Element {
       // Если ответа ещё нет (теоретически — кнопка disabled, но на всякий
       // случай) — пишем "latest", соответствующее поведение сервера.
       const datePart = data?.snapshotDate ?? "latest";
-      await downloadForecastCsv(
+      await downloadForecastFile(
         `/api/forecast/export-regional-stocks${qs ? `?${qs}` : ""}`,
         undefined,
-        `regional-stocks-${form.macroRegion}-${datePart}-h${form.horizonDays}.csv`,
+        `regional-stocks-${form.macroRegion}-${datePart}-h${form.horizonDays}.xlsx`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -484,10 +484,10 @@ export function RegionalStocksPage(): JSX.Element {
                 type="button"
                 class="btn-load"
                 disabled={exporting || orderableRowCount === 0}
-                onClick={() => void exportCsv()}
-                title="Экспортировать в CSV только позиции с ненулевым «Заказ»"
+                onClick={() => void exportXlsx()}
+                title="Экспортировать в Excel (XLSX) только позиции с ненулевым «Заказ»"
               >
-                {exporting ? "Экспорт…" : "Экспорт в CSV"}
+                {exporting ? "Экспорт…" : "Экспорт в Excel"}
               </button>
             </div>
           </div>

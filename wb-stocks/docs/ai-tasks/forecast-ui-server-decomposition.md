@@ -6,7 +6,7 @@
 
 ## Структура
 
-- `forecast-ui/http/` — `json`, `readBody`, `authOk`, `sendCsvAttachment`
+- `forecast-ui/http/` — `json`, `readBody`, `authOk`, `sendXlsxAttachment` (был `sendCsvAttachment`; см. `forecast-ui-csv-to-xlsx-export.md`)
 - `forecast-ui/parse/` — константы, `forecastQuery`, `exportQuery`, `diagnosticsQuery`
 - `forecast-ui/csv/forecastExportMappers.ts` — колонки и маппинг строк в объекты для CSV
 - `forecast-ui/handlers/` — SPA/static, health, forecast read, diagnostics, export, recalculate

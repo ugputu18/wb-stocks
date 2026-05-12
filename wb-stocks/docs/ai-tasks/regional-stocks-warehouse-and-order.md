@@ -41,11 +41,13 @@
 Нужно, Склад, Заказ
 ```
 
-Имя файла — `regional-stocks-{Регион}-{YYYY-MM-DD}-h{horizonDays}.csv`. Не-ASCII
+Имя файла — `regional-stocks-{Регион}-{YYYY-MM-DD}-h{horizonDays}.xlsx`. Не-ASCII
 имя региона корректно уезжает через RFC 5987-параметр `filename*=UTF-8''…`
-в `Content-Disposition` (см. `sendCsvAttachment`); легаси-параметр
-`filename="..."` содержит ASCII-fallback. Файл шлётся с UTF-8 BOM, чтобы
-кириллические заголовки правильно открывались в Excel.
+в `Content-Disposition` (см. `sendXlsxAttachment`); легаси-параметр
+`filename="..."` содержит ASCII-fallback. Сам файл — нормальный XLSX
+(`exceljs`), кириллические заголовки и числа открываются одинаково в любой
+локали Excel/LibreOffice; CSV здесь раньше ломал десятичную точку и длинные
+`nm_id` (см. `forecast-ui-csv-to-xlsx-export.md`).
 
 ## Ключевые решения
 

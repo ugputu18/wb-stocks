@@ -6,6 +6,18 @@ import type {
   WbTotalBySkuReportRow,
 } from "../../../infra/wbForecastSnapshotRepository.js";
 
+/**
+ * Колонки и мапперы экспортных отчётов прогноза.
+ *
+ * Раньше выгружали CSV, но оказалось, что Excel при открытии CSV ломал
+ * числа с дробной частью (`0.5` vs `0,5`) и склеивал большие
+ * `nm_id`/телефоны в экспоненциальные представления — оператору
+ * приходилось каждый раз вручную чинить локаль. Теперь рендерим XLSX
+ * (см. `toXlsxBuffer`), числа уходят как числа, шапка работает в любой
+ * локали. Структура колонок и порядок сохранены 1:1 с прежней CSV-выгрузкой,
+ * чтобы аналитические шаблоны на стороне аналитиков не пришлось переписывать.
+ */
+
 export const WB_EXPORT_COLUMNS = [
   "warehouse_key",
   "vendor_code",
@@ -88,12 +100,12 @@ export const SUPPLIER_EXPORT_COLUMNS = [
 ] as const;
 
 /**
- * Колонки CSV-выгрузки страницы «Запасы WB по региону».
+ * Колонки XLSX-выгрузки страницы «Запасы WB по региону».
  *
  * Имена колонок и их порядок умышленно совпадают 1:1 с заголовками таблицы
- * на странице (`RegionalStocksPage.tsx`) — оператор открывает CSV в Excel и
- * видит ровно ту же шапку, что и в UI. Любое расхождение между UI и CSV в
- * этом списке будет восприниматься как баг.
+ * на странице (`RegionalStocksPage.tsx`) — оператор открывает файл в Excel
+ * и видит ровно ту же шапку, что и в UI. Любое расхождение между UI и
+ * выгрузкой в этом списке будет восприниматься как баг.
  */
 export const REGIONAL_STOCKS_EXPORT_COLUMNS = [
   "Риск",
@@ -109,36 +121,43 @@ export const REGIONAL_STOCKS_EXPORT_COLUMNS = [
   "Заказ",
 ] as const;
 
-export function forecastWbCsvFilename(snapshotDate: string, horizonDays: number): string {
-  return `wb-replenishment-${snapshotDate}-h${horizonDays}.csv`;
+export function forecastWbXlsxFilename(
+  snapshotDate: string,
+  horizonDays: number,
+): string {
+  return `wb-replenishment-${snapshotDate}-h${horizonDays}.xlsx`;
 }
 
-export function forecastSupplierCsvFilename(snapshotDate: string, horizonDays: number): string {
-  return `supplier-replenishment-${snapshotDate}-h${horizonDays}.csv`;
+export function forecastSupplierXlsxFilename(
+  snapshotDate: string,
+  horizonDays: number,
+): string {
+  return `supplier-replenishment-${snapshotDate}-h${horizonDays}.xlsx`;
 }
 
 /**
  * Файл экспорта по странице "Запасы WB по региону".
  * Кодируем макрорегион в имени, чтобы аналитик не перепутал выгрузки по
- * разным регионам (имя кириллическое — браузер сохранит как есть).
+ * разным регионам (имя кириллическое — браузер сохранит как есть благодаря
+ * RFC 5987 `filename*` в Content-Disposition).
  */
-export function regionalStocksCsvFilename(
+export function regionalStocksXlsxFilename(
   snapshotDate: string,
   horizonDays: number,
   macroRegion: string,
 ): string {
   const safeMacro = macroRegion.replace(/[\\/:*?"<>|\s]+/g, "_");
-  return `regional-stocks-${safeMacro}-${snapshotDate}-h${horizonDays}.csv`;
+  return `regional-stocks-${safeMacro}-${snapshotDate}-h${horizonDays}.xlsx`;
 }
 
 /**
- * Маппинг строк отчёта в формат для `toCsv`. Имена ключей в точности
+ * Маппинг строк отчёта в формат для записи XLSX. Имена ключей в точности
  * совпадают с заголовками таблицы UI (см. `REGIONAL_STOCKS_EXPORT_COLUMNS`).
  *
  * Экспортируется ВСЁ что приходит — фильтрация «Заказ > 0» делается на
  * стороне роута (см. `exportRoutes.ts`).
  */
-export function regionalStocksRowsToCsvObjects(
+export function regionalStocksRowsToExportObjects(
   rows: readonly RegionalStocksReportRow[],
 ): Record<string, unknown>[] {
   return rows.map((row) => ({
@@ -156,7 +175,7 @@ export function regionalStocksRowsToCsvObjects(
   }));
 }
 
-export function wbTotalRowsToCsvObjects(
+export function wbTotalRowsToExportObjects(
   rows: WbTotalBySkuReportRow[],
 ): Record<string, unknown>[] {
   return rows.map((row) => ({
@@ -178,7 +197,7 @@ export function wbTotalRowsToCsvObjects(
   }));
 }
 
-export function systemTotalRowsToCsvObjects(
+export function systemTotalRowsToExportObjects(
   rows: SystemTotalBySkuReportRow[],
 ): Record<string, unknown>[] {
   return rows.map((row) => ({
@@ -203,7 +222,7 @@ export function systemTotalRowsToCsvObjects(
   }));
 }
 
-export function wbReportRowsToCsvObjects(
+export function wbReportRowsToExportObjects(
   rows: WbForecastSnapshotReportRow[],
 ): Record<string, unknown>[] {
   return rows.map((row) => ({
@@ -228,7 +247,7 @@ export function wbReportRowsToCsvObjects(
   }));
 }
 
-export function supplierRowsToCsvObjects(
+export function supplierRowsToExportObjects(
   rows: SupplierSkuReplenishmentReadModel[],
   targetCoverageDays: number,
 ): Record<string, unknown>[] {
@@ -249,6 +268,9 @@ export function supplierRowsToCsvObjects(
     safety_days: r.safetyDays,
     stock_at_arrival: r.stockAtArrival,
     recommended_order_qty: r.recommendedOrderQty,
+    // Булев флаг в Excel смотрится естественно как TRUE/FALSE; оставляем
+    // прежний строковый сериализованный вариант, чтобы аналитические
+    // фильтры по точному совпадению строки не сломались.
     will_stockout_before_arrival: r.willStockoutBeforeArrival ? "true" : "false",
     days_until_stockout:
       r.daysUntilStockout === null || r.daysUntilStockout === undefined

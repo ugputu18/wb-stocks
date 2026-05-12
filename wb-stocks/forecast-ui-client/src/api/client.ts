@@ -197,14 +197,24 @@ export async function fetchRegionalVsWarehouseSummary(
   );
 }
 
-/** Скачивание CSV с теми же правилами, что legacy `downloadCsv` (Accept, Bearer, Content-Disposition). */
-export async function downloadForecastCsv(
+/**
+ * Скачивание файла-выгрузки с сервера прогноза (xlsx). Сохраняет правила
+ * legacy `downloadCsv`: пробрасывает Bearer-токен, корректно достаёт имя
+ * из `Content-Disposition` (включая RFC 5987 `filename*=UTF-8''…` для
+ * кириллических регионов) и красиво сообщает об ошибках.
+ *
+ * Изначально функция называлась `downloadForecastCsv` и слала `Accept: text/csv`;
+ * после миграции выгрузок на XLSX оставили универсальное имя
+ * `downloadForecastFile`, чтобы не плодить два дублирующих хелпера.
+ */
+export async function downloadForecastFile(
   path: string,
   token: string | undefined,
   fallbackFilename: string,
 ): Promise<void> {
   const headers: Record<string, string> = {
-    Accept: "text/csv,*/*",
+    Accept:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*",
   };
   if (token?.trim()) {
     headers.Authorization = `Bearer ${token.trim()}`;

@@ -271,7 +271,7 @@ export function RegionalDemandDiagnosticsPage(): JSX.Element {
       ) : null}
 
       {!loading && !error && data && data.regionalTotals.length === 0 ? (
-        <p class="muted">Нет строк в <code>wb_region_demand_snapshots</code> на выбранную дату.</p>
+        <p class="muted">Нет строк в <code>wb_region_demand_snapshots</code> по последнему срезу.</p>
       ) : null}
 
       <style>{`

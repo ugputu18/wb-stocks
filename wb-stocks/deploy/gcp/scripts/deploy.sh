@@ -28,6 +28,11 @@ GIT_REF_ARG="${GIT_REF:-}"
 
 cd "$APP_DIR"
 sudo -u wbstocks git fetch --all --tags --prune
+GENERATED_FORECAST_UI_INDEX=wb-stocks/public/forecast-ui-next/index.html
+if sudo -u wbstocks git ls-files --error-unmatch "$GENERATED_FORECAST_UI_INDEX" >/dev/null 2>&1; then
+  # Vite rewrites this generated file during deploy; discard it before updating code.
+  sudo -u wbstocks git restore -- "$GENERATED_FORECAST_UI_INDEX"
+fi
 if [[ -n "$GIT_REF_ARG" ]]; then
   sudo -u wbstocks git checkout "$GIT_REF_ARG"
 fi

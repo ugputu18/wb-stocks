@@ -159,7 +159,7 @@ export function useRedistributionRun({
       const donorRes = await fetchForecastRows(sp);
       const donorRows = Array.isArray(donorRes.rows) ? donorRes.rows : [];
       if (donorRows.length === 0) {
-        setError("Нет строк на выбранном складе — проверьте дату среза и лимит.");
+        setError("Нет строк на выбранном складе — проверьте наличие свежего среза и лимит.");
         setLoading(false);
         return;
       }

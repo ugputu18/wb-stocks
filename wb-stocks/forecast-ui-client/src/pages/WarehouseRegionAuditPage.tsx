@@ -51,7 +51,7 @@ export function WarehouseRegionAuditPage(): JSX.Element {
       <header class="top">
         <h1>Аудит маппинга складов → регион</h1>
         <p class="muted warehouse-audit-lede">
-          Агрегаты по строкам <code>wb_forecast_snapshots</code> (SKU×склад) для выбранного среза. Склады без
+          Агрегаты по строкам <code>wb_forecast_snapshots</code> (SKU×склад) для последнего среза. Склады без
           записи в справочнике дают вклад в «не сопоставлено» и искажают кластерные суммы, пока не добавлены ключи в{" "}
           <code>wbWarehouseMacroRegion.ts</code>.
         </p>

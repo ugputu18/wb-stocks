@@ -6,11 +6,11 @@ export const MIN_DONOR_WAREHOUSE_LOCAL_UNITS = 10;
  * подтягивает с WB:
  * - текущие остатки по складам (`importWbStocks`),
  * - заказы за окно спроса (30 дней),
- * - пересобирает demand/forecast на выбранную дату среза/горизонт,
+ * - пересобирает demand/forecast на актуальную дату и выбранный горизонт,
  * - обновляет суммы Σ local в выпадающем списке складов.
  */
 export const WB_WAREHOUSE_STATS_BUTTON_TITLE =
-  "Подтянет с Wildberries свежие остатки по складам и заказы за окно спроса, пересчитает прогноз на выбранную дату/горизонт и обновит суммы по складам.";
+  "Подтянет с Wildberries свежие остатки по складам и заказы за окно спроса, пересчитает прогноз на актуальную дату и выбранный горизонт, затем обновит суммы по складам.";
 
 export function formatWarehouseStatsAgeRu(fetchedAtMs: number): string {
   const elapsedSec = Math.floor((Date.now() - fetchedAtMs) / 1000);

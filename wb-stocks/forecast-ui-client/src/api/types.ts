@@ -44,13 +44,44 @@ export interface ForecastRowsResponse {
   [key: string]: unknown;
 }
 
+export interface SupplierReplenishmentRow {
+  nmId: number;
+  techSize: string;
+  vendorCode: string | null;
+  systemDailyDemand: number;
+  sumForecastDailyDemand: number;
+  leadTimeDays: number;
+  orderCoverageDays: number;
+  safetyDays: number;
+  targetDemandSystem: number;
+  wbAvailableTotal: number;
+  wbStartStockTotal: number;
+  wbIncomingUnitsTotal: number;
+  ownStock: number;
+  systemAvailable: number;
+  recommendedFromSupplier: number;
+  stockAtArrival: number;
+  recommendedOrderQty: number;
+  willStockoutBeforeArrival: boolean;
+  daysUntilStockout: number | null;
+}
+
 export interface SupplierReplenishmentResponse {
-  rows?: unknown[];
+  snapshotDate?: string;
+  horizonDays?: number;
+  rows?: SupplierReplenishmentRow[];
   targetCoverageDays?: number;
+  leadTimeDays?: number;
+  coverageDays?: number;
+  safetyDays?: number;
+  ownWarehouseCode?: string;
+  viewMode?: ForecastViewMode;
   [key: string]: unknown;
 }
 
 export interface WarehouseKeysResponse {
+  snapshotDate?: string;
+  horizonDays?: number;
   warehouseKeys: string[];
 }
 
@@ -83,9 +114,12 @@ export interface WarehouseTariffsResponse {
   tariffs: WarehouseTariff[];
 }
 
+export type RegionalStocksScope = "region" | "wb" | "wbWithOwn";
+
 export interface RegionalStocksResponse {
   snapshotDate: string;
   horizonDays: number;
+  stockScope: RegionalStocksScope;
   macroRegion: string;
   targetCoverageDays: number;
   ownWarehouseCode: string;

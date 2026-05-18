@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { openDatabase } from "../src/infra/db.js";
 import { WbForecastSnapshotRepository } from "../src/infra/wbForecastSnapshotRepository.js";
 import type { WbForecastSnapshotRecord } from "../src/domain/wbForecastSnapshot.js";
+import { resolveLatestForecastSnapshotDate } from "../src/server/forecast-ui/queries/loadRegionalStocksReport.js";
 
 function rec(over: Partial<WbForecastSnapshotRecord> = {}): WbForecastSnapshotRecord {
   return {
@@ -70,6 +71,21 @@ describe("WbForecastSnapshotRepository", () => {
     expect(repo.countForKey("2026-04-17", 30)).toBe(0);
     expect(repo.countForKey("2026-04-17", 60)).toBe(1);
     expect(repo.countForKey("2026-04-18", 30)).toBe(1);
+  });
+
+  it("resolves latest snapshot globally or for a requested horizon", () => {
+    const db = openDatabase(":memory:");
+    const localRepo = new WbForecastSnapshotRepository(db);
+    localRepo.replaceForKey("2026-04-17", 30, [rec({ snapshotDate: "2026-04-17" })]);
+    localRepo.replaceForKey("2026-04-18", 60, [
+      rec({ snapshotDate: "2026-04-18", horizonDays: 60 }),
+    ]);
+    localRepo.replaceForKey("2026-04-19", 30, [rec({ snapshotDate: "2026-04-19" })]);
+
+    expect(resolveLatestForecastSnapshotDate(db)).toBe("2026-04-19");
+    expect(resolveLatestForecastSnapshotDate(db, 30)).toBe("2026-04-19");
+    expect(resolveLatestForecastSnapshotDate(db, 60)).toBe("2026-04-18");
+    expect(resolveLatestForecastSnapshotDate(db, 90)).toBeNull();
   });
 
   it("replaceForScope updates only the requested subset, leaving other rows intact", () => {

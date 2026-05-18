@@ -19,6 +19,8 @@ import {
   skuKey,
 } from "./forecast-report/forecastReportQueryHelpers.js";
 
+export type RegionalStocksScope = "region" | "wb" | "wbWithOwn";
+
 export interface RegionalStocksStockInputRow {
   warehouseKey: string;
   nmId: number;
@@ -85,6 +87,7 @@ export interface RegionalStocksReportSummary {
 export interface RegionalStocksReport {
   snapshotDate: string;
   horizonDays: number;
+  stockScope: RegionalStocksScope;
   macroRegion: string;
   targetCoverageDays: number;
   ownWarehouseCode: string;
@@ -96,6 +99,7 @@ export interface BuildRegionalStocksReportInput {
   snapshotDate: string;
   horizonDays: number;
   macroRegion: string;
+  stockScope?: RegionalStocksScope;
   targetCoverageDays: number;
   riskStockout?: RiskStockoutFilter;
   q?: string | null;
@@ -179,22 +183,41 @@ function ownWarehouseStockForVendor(
   return Number.isFinite(q) ? Math.max(0, Math.trunc(Number(q))) : 0;
 }
 
+function stockRowMatchesScope(
+  row: RegionalStocksStockInputRow,
+  scope: RegionalStocksScope,
+  macroRegion: string,
+): boolean {
+  const normalizedWarehouseKey = normalizeWarehouseName(row.warehouseKey);
+  if (
+    !warehouseContributesToRegionalAvailabilityStock(
+      getWarehouseRegistryEntry(row.warehouseKey),
+      normalizedWarehouseKey,
+    )
+  ) {
+    return false;
+  }
+  if (scope !== "region") return true;
+  return getWarehouseMacroRegion(row.warehouseKey) === macroRegion;
+}
+
+function demandRowMatchesScope(
+  row: RegionalStocksDemandInputRow,
+  scope: RegionalStocksScope,
+  macroRegion: string,
+  regionMacroLookup: ReadonlyMap<string, string>,
+): boolean {
+  if (scope !== "region") return true;
+  return getMacroRegionByRegionKey(row.regionKey, regionMacroLookup) === macroRegion;
+}
+
 export function buildRegionalStocksReport(
   input: BuildRegionalStocksReportInput,
 ): RegionalStocksReport {
+  const stockScope = input.stockScope ?? "region";
   const stockBySku = new Map<string, RegionalStockAccumulator>();
   for (const row of input.stockRows) {
-    const macro = getWarehouseMacroRegion(row.warehouseKey);
-    if (macro !== input.macroRegion) continue;
-    const normalizedWarehouseKey = normalizeWarehouseName(row.warehouseKey);
-    if (
-      !warehouseContributesToRegionalAvailabilityStock(
-        getWarehouseRegistryEntry(row.warehouseKey),
-        normalizedWarehouseKey,
-      )
-    ) {
-      continue;
-    }
+    if (!stockRowMatchesScope(row, stockScope, input.macroRegion)) continue;
 
     const key = skuKey(row.nmId, row.techSize);
     let acc = stockBySku.get(key);
@@ -220,8 +243,16 @@ export function buildRegionalStocksReport(
 
   const demandBySku = new Map<string, RegionalDemandAccumulator>();
   for (const row of input.demandRows) {
-    const macro = getMacroRegionByRegionKey(row.regionKey, input.regionMacroLookup);
-    if (macro !== input.macroRegion) continue;
+    if (
+      !demandRowMatchesScope(
+        row,
+        stockScope,
+        input.macroRegion,
+        input.regionMacroLookup,
+      )
+    ) {
+      continue;
+    }
     const key = skuKey(row.nmId, row.techSize);
     let acc = demandBySku.get(key);
     if (!acc) {
@@ -247,8 +278,18 @@ export function buildRegionalStocksReport(
     const techSize = d?.techSize ?? s?.techSize ?? "";
     const regionalStartStock = s?.regionalStartStock ?? 0;
     const regionalIncomingUnits = s?.regionalIncomingUnits ?? 0;
-    const regionalAvailable = regionalStartStock + regionalIncomingUnits;
     const regionalForecastDailyDemand = d?.regionalForecastDailyDemand ?? 0;
+    const vendorCode = betterVendorCode(
+      d?.vendorCode ?? null,
+      s?.vendorCode ?? null,
+    );
+    const ownWarehouseStock = ownWarehouseStockForVendor(
+      vendorCode,
+      input.ownStockByVendor,
+    );
+    const wbAvailable = regionalStartStock + regionalIncomingUnits;
+    const regionalAvailable =
+      stockScope === "wbWithOwn" ? wbAvailable + ownWarehouseStock : wbAvailable;
     if (regionalAvailable <= 0 && regionalForecastDailyDemand <= 0) {
       continue;
     }
@@ -262,14 +303,6 @@ export function buildRegionalStocksReport(
     );
     const risk = riskBucketFromDaysOfStock(
       Math.min(999_999, Math.floor(daysOfStockRegional)),
-    );
-    const vendorCode = betterVendorCode(
-      d?.vendorCode ?? null,
-      s?.vendorCode ?? null,
-    );
-    const ownWarehouseStock = ownWarehouseStockForVendor(
-      vendorCode,
-      input.ownStockByVendor,
     );
     const recommendedOrderQty = Math.min(recommendedToRegion, ownWarehouseStock);
     allRows.push({
@@ -318,6 +351,7 @@ export function buildRegionalStocksReport(
   return {
     snapshotDate: input.snapshotDate,
     horizonDays: input.horizonDays,
+    stockScope,
     macroRegion: input.macroRegion,
     targetCoverageDays: input.targetCoverageDays,
     ownWarehouseCode: input.ownWarehouseCode?.trim() || "main",

@@ -15,6 +15,7 @@ import {
 } from "../../../application/orderFlowDiagnostics.js";
 import { json } from "../http/json.js";
 import { parseQuery } from "../parse/forecastQuery.js";
+import { resolveLatestForecastSnapshotDate } from "../queries/loadRegionalStocksReport.js";
 import {
   parseOptionalVendorCode,
   parseOrdersDiagnosticsDateRange,
@@ -22,6 +23,32 @@ import {
 } from "../parse/diagnosticsQuery.js";
 import type { ForecastUiHandlerDeps } from "../types.js";
 import type { ForecastRouteMatch } from "../routes/routeTypes.js";
+
+function resolveForecastSnapshotDate(
+  deps: ForecastUiHandlerDeps,
+  snapshotDateRaw: string,
+  horizonDays: number,
+): { ok: true; snapshotDate: string } | { ok: false; status: number; error: string } {
+  if (!Number.isInteger(horizonDays) || horizonDays <= 0) {
+    return { ok: false, status: 400, error: "horizonDays required" };
+  }
+  if (snapshotDateRaw !== "") {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(snapshotDateRaw)) {
+      return { ok: false, status: 400, error: "snapshotDate must be YYYY-MM-DD" };
+    }
+    return { ok: true, snapshotDate: snapshotDateRaw };
+  }
+  const latest = resolveLatestForecastSnapshotDate(deps.db, horizonDays);
+  if (latest === null) {
+    return {
+      ok: false,
+      status: 404,
+      error:
+        "No forecast snapshots found in DB for requested horizon (run sales forecast MVP first)",
+    };
+  }
+  return { ok: true, snapshotDate: latest };
+}
 
 export function createDiagnosticsRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMatch[] {
   const { cfg, logger, wbClient, forecastRepo } = deps;
@@ -33,15 +60,17 @@ export function createDiagnosticsRoutes(deps: ForecastUiHandlerDeps): ForecastRo
       handle: (req, res, url) => {
         void req;
         const q = parseQuery(url);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(q.snapshotDate) || !Number.isInteger(q.horizonDays) || q.horizonDays <= 0) {
-          json(res, 400, { ok: false, error: "snapshotDate and horizonDays required" });
+        const resolved = resolveForecastSnapshotDate(deps, q.snapshotDate, q.horizonDays);
+        if (!resolved.ok) {
+          json(res, resolved.status, { ok: false, error: resolved.error });
           return;
         }
+        const snapshotDate = resolved.snapshotDate;
         const raw = forecastRepo.aggregateWarehouseMetricsPerWarehouse(
-          q.snapshotDate,
+          snapshotDate,
           q.horizonDays,
         );
-        const audit = buildWarehouseRegionAudit(q.snapshotDate, q.horizonDays, raw);
+        const audit = buildWarehouseRegionAudit(snapshotDate, q.horizonDays, raw);
         json(res, 200, audit);
       },
     },
@@ -51,28 +80,31 @@ export function createDiagnosticsRoutes(deps: ForecastUiHandlerDeps): ForecastRo
       handle: (req, res, url) => {
         void req;
         const q = parseQuery(url);
-        if (
-          !/^\d{4}-\d{2}-\d{2}$/.test(q.snapshotDate) ||
-          ![30, 60, 90].includes(q.horizonDays)
-        ) {
+        if (![30, 60, 90].includes(q.horizonDays)) {
           json(res, 400, {
             ok: false,
-            error: "snapshotDate (YYYY-MM-DD) and horizonDays (30|60|90) required",
+            error: "horizonDays (30|60|90) required",
           });
           return;
         }
+        const resolved = resolveForecastSnapshotDate(deps, q.snapshotDate, q.horizonDays);
+        if (!resolved.ok) {
+          json(res, resolved.status, { ok: false, error: resolved.error });
+          return;
+        }
+        const snapshotDate = resolved.snapshotDate;
         const regionDemandRepo = new WbRegionDemandSnapshotRepository(deps.db);
         const macroRepoRegional = new WbRegionMacroRegionRepository(deps.db);
-        const regionalByRegion = regionDemandRepo.aggregateDemandByRegion(q.snapshotDate);
+        const regionalByRegion = regionDemandRepo.aggregateDemandByRegion(snapshotDate);
         const warehouseMetrics = forecastRepo
-          .aggregateWarehouseMetricsPerWarehouse(q.snapshotDate, q.horizonDays)
+          .aggregateWarehouseMetricsPerWarehouse(snapshotDate, q.horizonDays)
           .map((w) => ({
             warehouseKey: w.warehouseKey,
             sumForecastDailyDemand: w.sumForecastDailyDemand,
           }));
         const regionMacroLookup = buildRegionMacroLookup(macroRepoRegional.getAll());
         const summary = buildRegionalVsWarehouseSummary({
-          snapshotDate: q.snapshotDate,
+          snapshotDate,
           horizonDays: q.horizonDays,
           regionalByRegion,
           warehouseMetrics,

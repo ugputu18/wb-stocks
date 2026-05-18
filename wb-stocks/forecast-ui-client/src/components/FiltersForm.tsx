@@ -22,7 +22,6 @@ import { formatWarehouseWithRegion } from "../utils/wbWarehouseRegion.js";
 
 export interface FiltersFormProps {
   form: ForecastUrlFormState;
-  apiToken: string;
   warehouseKeys: string[] | null;
   loadStatus: LoadStatus;
   uiBlocked: boolean;
@@ -30,7 +29,6 @@ export interface FiltersFormProps {
   patch: (p: Partial<ForecastUrlFormState>) => void;
   patchAndReload: (p: Partial<ForecastUrlFormState>) => void;
   scheduleQReload: () => void;
-  setApiToken: (token: string) => void;
 }
 
 type QuickPreset =
@@ -84,7 +82,6 @@ function presetPatch(preset: QuickPreset): Partial<ForecastUrlFormState> {
 export function FiltersForm(props: FiltersFormProps): JSX.Element {
   const {
     form,
-    apiToken,
     warehouseKeys,
     loadStatus,
     uiBlocked,
@@ -92,7 +89,6 @@ export function FiltersForm(props: FiltersFormProps): JSX.Element {
     patch,
     patchAndReload,
     scheduleQReload,
-    setApiToken,
   } = props;
 
   const quickActive = useMemo(
@@ -132,18 +128,6 @@ export function FiltersForm(props: FiltersFormProps): JSX.Element {
               <option value="wbTotal">WB в целом</option>
               <option value="wbWarehouses">По складам WB</option>
             </select>
-          </label>
-          <label class={filterField({ layout: "date" })}>
-            <LabelWithInlineHelp>Дата среза</LabelWithInlineHelp>
-            <input
-              type="date"
-              value={form.snapshotDate}
-              onInput={(e) =>
-                patchAndReload({
-                  snapshotDate: (e.target as HTMLInputElement).value,
-                })
-              }
-            />
           </label>
           <label class={filterField({ layout: "medium" })}>
             <LabelWithInlineHelp>
@@ -432,17 +416,6 @@ export function FiltersForm(props: FiltersFormProps): JSX.Element {
                     patchAndReload({
                       ownWarehouseCode: (e.target as HTMLInputElement).value,
                     })
-                  }
-                />
-              </label>
-              <label class={filterField({ layout: "spanGridFull" })}>
-                <LabelWithInlineHelp>Bearer (FORECAST_UI_TOKEN)</LabelWithInlineHelp>
-                <input
-                  type="password"
-                  autocomplete="off"
-                  value={apiToken}
-                  onInput={(e) =>
-                    setApiToken((e.target as HTMLInputElement).value)
                   }
                 />
               </label>

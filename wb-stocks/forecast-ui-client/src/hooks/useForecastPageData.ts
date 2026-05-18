@@ -37,7 +37,7 @@ export function useForecastPageData(options: UseForecastPageDataOptions = {}) {
   const loadSeqRef = useRef(0);
 
   const loadAll = useCallback(
-    async (form: ForecastUrlFormState, token: string): Promise<LoadResult> => {
+    async (form: ForecastUrlFormState): Promise<LoadResult> => {
       const seq = ++loadSeqRef.current;
       dispatch({ type: "loadStart" });
       setStatusTone("default");
@@ -49,10 +49,10 @@ export function useForecastPageData(options: UseForecastPageDataOptions = {}) {
         const supSp = toSupplierSearchParams(form);
 
         const [summary, rows, supplier, wh] = await Promise.all([
-          fetchForecastSummary(sumSp, token),
-          fetchForecastRows(rowSp, token),
-          fetchSupplierReplenishment(supSp, token),
-          fetchWarehouseKeys(wkSp, token),
+          fetchForecastSummary(sumSp),
+          fetchForecastRows(rowSp),
+          fetchSupplierReplenishment(supSp),
+          fetchWarehouseKeys(wkSp),
         ]);
 
         if (seq !== loadSeqRef.current) {

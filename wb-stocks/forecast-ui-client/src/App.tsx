@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useRef } from "preact/hooks";
-import { FORECAST_UI_SPA_ROUTES } from "./routes.js";
 import { ActionsBar } from "./components/ActionsBar.js";
 import { DetailPanel } from "./components/DetailPanel.js";
 import { FiltersForm } from "./components/FiltersForm.js";
+import { ForecastSystemNav } from "./components/ForecastSystemNav.js";
 import { MainTable } from "./components/MainTable.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { SupplierTable } from "./components/SupplierTable.js";
@@ -46,7 +46,6 @@ export function App() {
 
   const actions = useForecastActions({
     form: formState.form,
-    apiToken: formState.apiToken,
     reload: pageData.loadAll,
     clearQDebounce: formState.clearQDebounce,
     setStatusLine: pageData.setStatusLine,
@@ -88,21 +87,18 @@ export function App() {
 
   return (
     <div class="forecast-next-root">
+      <ForecastSystemNav
+        dataDate={pageData.summary?.snapshotDate}
+        onRecalculate={actions.runRecalculate}
+        recalculateBusy={actions.actionBusy === "recalculate"}
+        recalculateDisabled={uiBlocked}
+      />
       <header class="top">
         <h1>WB sales forecast</h1>
-        <p class="muted">
-          Summary + основная таблица + закупка.{" "}
-          <a href={FORECAST_UI_SPA_ROUTES.regionalStocks}>Запасы по региону WB</a>
-          {" · "}
-          <a href={FORECAST_UI_SPA_ROUTES.redistribution}>Перемещение между складами WB</a>
-          {" · "}
-          <a href={FORECAST_UI_SPA_ROUTES.regionalDemandDiagnostics}>Регион vs fulfillment</a>
-        </p>
       </header>
 
       <FiltersForm
         form={formState.form}
-        apiToken={formState.apiToken}
         warehouseKeys={pageData.warehouseKeys}
         loadStatus={pageData.loadStatus}
         uiBlocked={uiBlocked}
@@ -110,7 +106,6 @@ export function App() {
         patch={formState.patch}
         patchAndReload={formState.patchAndReload}
         scheduleQReload={formState.scheduleQReload}
-        setApiToken={formState.setApiToken}
       />
 
       <ActionsBar
@@ -118,7 +113,6 @@ export function App() {
         actionBusy={actions.actionBusy}
         totalRowsKpi={totalRowsKpi}
         supCount={supCount}
-        onRecalculate={actions.runRecalculate}
         onExportWb={actions.runExportWb}
         onExportSupplier={actions.runExportSupplier}
         onUploadOwnStocks={actions.runUploadOwnStocks}

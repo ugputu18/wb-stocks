@@ -11,7 +11,7 @@ import { isStale, type LoadResult } from "../utils/forecastLoadMessage.js";
 import { syncUrlPush, syncUrlReplace } from "../utils/forecastUrlSync.js";
 
 export interface UseForecastFormStateOptions {
-  reload: (form: ForecastUrlFormState, token: string) => Promise<LoadResult>;
+  reload: (form: ForecastUrlFormState) => Promise<LoadResult>;
 }
 
 export function useForecastFormState(options: UseForecastFormStateOptions) {
@@ -24,8 +24,6 @@ export function useForecastFormState(options: UseForecastFormStateOptions) {
 
   const formRef = useRef(state.form);
   formRef.current = state.form;
-  const apiTokenRef = useRef(state.apiToken);
-  apiTokenRef.current = state.apiToken;
 
   const qDebounceTimerRef = useRef<number | null>(null);
 
@@ -51,8 +49,7 @@ export function useForecastFormState(options: UseForecastFormStateOptions) {
     qDebounceTimerRef.current = window.setTimeout(() => {
       qDebounceTimerRef.current = null;
       const f = formRef.current;
-      const t = apiTokenRef.current;
-      void reload(f, t).then((r) => {
+      void reload(f).then((r) => {
         if (r.ok && !isStale(r)) syncUrlReplace(f);
       });
     }, 300);
@@ -61,7 +58,7 @@ export function useForecastFormState(options: UseForecastFormStateOptions) {
   useEffect(() => {
     const form = applyFormFromUrl();
     clearQDebounce();
-    void reload(form, apiTokenRef.current).then((r) => {
+    void reload(form).then((r) => {
       if (r.ok && !isStale(r)) {
         syncUrlReplace(form);
       }
@@ -72,7 +69,7 @@ export function useForecastFormState(options: UseForecastFormStateOptions) {
     const onPop = () => {
       clearQDebounce();
       const form = applyFormFromUrl();
-      void reload(form, apiTokenRef.current);
+      void reload(form);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -87,23 +84,23 @@ export function useForecastFormState(options: UseForecastFormStateOptions) {
       clearQDebounce();
       const next = { ...state.form, ...p };
       dispatch({ type: "patchForm", patch: p });
-      void reload(next, state.apiToken).then((r) => {
+      void reload(next).then((r) => {
         if (r.ok && !isStale(r)) syncUrlReplace(next);
       });
     },
-    [state.form, state.apiToken, reload, clearQDebounce],
+    [state.form, reload, clearQDebounce],
   );
 
   const submitReload = useCallback(
     async (ev: Event) => {
       ev.preventDefault();
       clearQDebounce();
-      const r = await reload(state.form, state.apiToken);
+      const r = await reload(state.form);
       if (r.ok && !isStale(r)) {
         syncUrlReplace(state.form);
       }
     },
-    [clearQDebounce, reload, state.form, state.apiToken],
+    [clearQDebounce, reload, state.form],
   );
 
   const drillToWarehouses = useCallback(
@@ -118,18 +115,13 @@ export function useForecastFormState(options: UseForecastFormStateOptions) {
       };
       dispatch({ type: "init", form: nextForm });
       syncUrlPush(nextForm);
-      void reload(nextForm, apiTokenRef.current);
+      void reload(nextForm);
     },
     [state.form, reload, clearQDebounce],
   );
 
-  const setApiToken = useCallback((token: string) => {
-    dispatch({ type: "setApiToken", token });
-  }, []);
-
   return {
     form: state.form,
-    apiToken: state.apiToken,
     patch,
     patchAndReload,
     submitReload,
@@ -139,6 +131,5 @@ export function useForecastFormState(options: UseForecastFormStateOptions) {
     scheduleQReload,
     clearQDebounce,
     drillToWarehouses,
-    setApiToken,
   };
 }

@@ -19,7 +19,6 @@ import type { WarehouseOptionStats } from "./redistributionTypes.js";
 
 export function useRedistributionWarehouses(
   form: ForecastUrlFormState,
-  apiToken: string,
   donorKey: string,
   setDonorKey: (v: string) => void,
 ): {
@@ -32,8 +31,10 @@ export function useRedistributionWarehouses(
   refreshFromWbError: string | null;
   donorSelectKeys: string[];
   warehouseStatsAgeLabel: string | null;
+  dataDate: string | null;
 } {
   const [warehouseKeys, setWarehouseKeys] = useState<string[]>([]);
+  const [dataDate, setDataDate] = useState<string | null>(null);
   const [warehouseStats, setWarehouseStats] = useState<Map<string, WarehouseOptionStats>>(
     () => new Map(),
   );
@@ -61,29 +62,35 @@ export function useRedistributionWarehouses(
   const reloadWarehouseKeys = useCallback(async () => {
     try {
       const sp = toWarehouseKeysSearchParams(form);
-      const res = await fetchWarehouseKeys(sp, apiToken);
+      const res = await fetchWarehouseKeys(sp);
       setWarehouseKeys(Array.isArray(res.warehouseKeys) ? res.warehouseKeys : []);
+      setDataDate(res.snapshotDate ?? null);
     } catch {
       setWarehouseKeys([]);
+      setDataDate(null);
     }
-  }, [form, apiToken]);
+  }, [form]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const sp = toWarehouseKeysSearchParams(form);
-        const res = await fetchWarehouseKeys(sp, apiToken);
+        const res = await fetchWarehouseKeys(sp);
         if (cancelled) return;
         setWarehouseKeys(Array.isArray(res.warehouseKeys) ? res.warehouseKeys : []);
+        setDataDate(res.snapshotDate ?? null);
       } catch {
-        if (!cancelled) setWarehouseKeys([]);
+        if (!cancelled) {
+          setWarehouseKeys([]);
+          setDataDate(null);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [form.snapshotDate, form.horizonDays, apiToken]);
+  }, [form.horizonDays]);
 
   const loadWarehouseStats = useCallback(async () => {
     if (warehouseKeys.length === 0) return;
@@ -92,7 +99,7 @@ export function useRedistributionWarehouses(
     try {
       await runConcurrency(warehouseKeys, 5, async (key) => {
         const sp = toDonorWarehouseRowsParams(form, key);
-        const res = await fetchForecastRows(sp, apiToken);
+        const res = await fetchForecastRows(sp);
         const rows = Array.isArray(res.rows) ? res.rows : [];
         let totalLocal = 0;
         let displayName = key;
@@ -117,7 +124,7 @@ export function useRedistributionWarehouses(
     } finally {
       setStatsLoading(false);
     }
-  }, [form, apiToken, warehouseKeys]);
+  }, [form, warehouseKeys]);
 
   useEffect(() => {
     if (warehouseKeys.length === 0) return;
@@ -154,14 +161,10 @@ export function useRedistributionWarehouses(
     try {
       const h = Number(form.horizonDays);
       const horizon = Number.isFinite(h) && h > 0 ? Math.trunc(h) : 30;
-      await postForecastRecalculate(
-        {
-          snapshotDate: form.snapshotDate,
-          horizons: [horizon],
-          dryRun: false,
-        },
-        apiToken,
-      );
+      await postForecastRecalculate({
+        horizons: [horizon],
+        dryRun: false,
+      });
       await reloadWarehouseKeys();
       await loadWarehouseStats();
     } catch (e) {
@@ -170,7 +173,7 @@ export function useRedistributionWarehouses(
     } finally {
       setRefreshFromWbLoading(false);
     }
-  }, [form.snapshotDate, form.horizonDays, apiToken, reloadWarehouseKeys, loadWarehouseStats]);
+  }, [form.horizonDays, reloadWarehouseKeys, loadWarehouseStats]);
 
   return {
     warehouseKeys,
@@ -182,5 +185,6 @@ export function useRedistributionWarehouses(
     refreshFromWbError,
     donorSelectKeys,
     warehouseStatsAgeLabel,
+    dataDate,
   };
 }

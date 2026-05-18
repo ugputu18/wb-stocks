@@ -390,10 +390,6 @@ const filterFieldRecipe = defineRecipe({
         flex: "0 1 7.5rem",
         maxWidth: "min(100%, 9rem)",
       },
-      date: {
-        flex: "0 1 10.5rem",
-        maxWidth: "min(100%, 11.5rem)",
-      },
       tech: {
         flex: "0 1 7.5rem",
         maxWidth: "min(100%, 10rem)",
@@ -413,14 +409,6 @@ const filterFieldRecipe = defineRecipe({
         flex: "1 1 12rem",
         minWidth: "min(100%, 10rem)",
         maxWidth: "100%",
-      },
-      /** Полная ширина строки в grid (Bearer) */
-      spanGridFull: {
-        width: "100%",
-        maxWidth: "100%",
-        gridColumn: "1 / -1",
-        alignSelf: "start",
-        marginTop: "0.2rem",
       },
     },
   },

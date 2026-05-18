@@ -29,16 +29,14 @@ function fallbackSupplierXlsxName(snapshotDate: string, horizonDays: string): st
 
 interface UseForecastActionsParams {
   form: ForecastUrlFormState;
-  apiToken: string;
-  reload: (form: ForecastUrlFormState, token: string) => Promise<LoadResult>;
+  reload: (form: ForecastUrlFormState) => Promise<LoadResult>;
   clearQDebounce: () => void;
   setStatusLine: (s: string) => void;
   setStatusTone: (t: "default" | "error") => void;
 }
 
 export function useForecastActions(params: UseForecastActionsParams) {
-  const { form, apiToken, reload, clearQDebounce, setStatusLine, setStatusTone } =
-    params;
+  const { form, reload, clearQDebounce, setStatusLine, setStatusTone } = params;
 
   const [actionBusy, setActionBusy] = useState<ActionBusy>(null);
 
@@ -49,15 +47,11 @@ export function useForecastActions(params: UseForecastActionsParams) {
     try {
       const h = Number(form.horizonDays);
       clearQDebounce();
-      await postForecastRecalculate(
-        {
-          snapshotDate: form.snapshotDate,
-          horizons: [Number.isFinite(h) && h > 0 ? h : 30],
-          dryRun: false,
-        },
-        apiToken,
-      );
-      const r = await reload(form, apiToken);
+      await postForecastRecalculate({
+        horizons: [Number.isFinite(h) && h > 0 ? h : 30],
+        dryRun: false,
+      });
+      const r = await reload(form);
       if (r.ok && !isStale(r)) {
         syncUrlReplace(form);
       } else if (!r.ok && !isStale(r) && "message" in r) {
@@ -71,7 +65,7 @@ export function useForecastActions(params: UseForecastActionsParams) {
     } finally {
       setActionBusy(null);
     }
-  }, [form, apiToken, reload, clearQDebounce, setStatusLine, setStatusTone]);
+  }, [form, reload, clearQDebounce, setStatusLine, setStatusTone]);
 
   const runExportWb = useCallback(async () => {
     setActionBusy("export-wb");
@@ -82,8 +76,7 @@ export function useForecastActions(params: UseForecastActionsParams) {
       const p = toSummaryRowsSearchParams(form).toString();
       await downloadForecastFile(
         `/api/forecast/export-wb?${p}`,
-        apiToken,
-        fallbackWbXlsxName(form.snapshotDate, form.horizonDays),
+        fallbackWbXlsxName("latest", form.horizonDays),
       );
       setStatusTone("default");
       setStatusLine("Excel скачан (WB).");
@@ -93,7 +86,7 @@ export function useForecastActions(params: UseForecastActionsParams) {
     } finally {
       setActionBusy(null);
     }
-  }, [form, apiToken, clearQDebounce, setStatusLine, setStatusTone]);
+  }, [form, clearQDebounce, setStatusLine, setStatusTone]);
 
   const runExportSupplier = useCallback(async () => {
     setActionBusy("export-supplier");
@@ -104,8 +97,7 @@ export function useForecastActions(params: UseForecastActionsParams) {
       const p = toSupplierSearchParams(form).toString();
       await downloadForecastFile(
         `/api/forecast/export-supplier?${p}`,
-        apiToken,
-        fallbackSupplierXlsxName(form.snapshotDate, form.horizonDays),
+        fallbackSupplierXlsxName("latest", form.horizonDays),
       );
       setStatusTone("default");
       setStatusLine("Excel скачан (supplier).");
@@ -115,7 +107,7 @@ export function useForecastActions(params: UseForecastActionsParams) {
     } finally {
       setActionBusy(null);
     }
-  }, [form, apiToken, clearQDebounce, setStatusLine, setStatusTone]);
+  }, [form, clearQDebounce, setStatusLine, setStatusTone]);
 
   const runUploadOwnStocks = useCallback(
     async (file: File) => {
@@ -127,10 +119,8 @@ export function useForecastActions(params: UseForecastActionsParams) {
         const result = await uploadOwnStocksCsv(
           file,
           {
-            date: form.snapshotDate,
             warehouse: warehouse ? warehouse : undefined,
           },
-          apiToken,
         );
         const det = result.detection;
         const cols = [
@@ -148,7 +138,7 @@ export function useForecastActions(params: UseForecastActionsParams) {
           `${cols ? `; колонки: ${cols}` : ""}).`;
         setStatusTone("default");
         setStatusLine(summary);
-        const r = await reload(form, apiToken);
+        const r = await reload(form);
         if (!r.ok && !isStale(r) && "message" in r) {
           setStatusTone("error");
           setStatusLine("Загрузка остатков: " + r.message);
@@ -161,7 +151,7 @@ export function useForecastActions(params: UseForecastActionsParams) {
         setActionBusy(null);
       }
     },
-    [form, apiToken, reload, setStatusLine, setStatusTone],
+    [form, reload, setStatusLine, setStatusTone],
   );
 
   return {

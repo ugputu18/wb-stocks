@@ -8,7 +8,6 @@ export interface ActionsBarProps {
   actionBusy: ActionBusy;
   totalRowsKpi: number;
   supCount: number;
-  onRecalculate: () => void;
   onExportWb: () => void;
   onExportSupplier: () => void;
   onUploadOwnStocks: (file: File) => void;
@@ -20,7 +19,6 @@ export function ActionsBar(props: ActionsBarProps): JSX.Element {
     actionBusy,
     totalRowsKpi,
     supCount,
-    onRecalculate,
     onExportWb,
     onExportSupplier,
     onUploadOwnStocks,
@@ -30,19 +28,6 @@ export function ActionsBar(props: ActionsBarProps): JSX.Element {
   return (
     <section class="panel actions-bar-panel">
       <div class="actions actions-with-hints">
-        <div class="action-with-hint">
-          <button
-            type="button"
-            class="primary"
-            disabled={uiBlocked}
-            onClick={() => void onRecalculate()}
-          >
-            {actionBusy === "recalculate" ? "Пересчёт…" : "Пересчитать срез"}
-          </button>
-          <p class="action-hint muted">
-            Заново тянет данные и пересчитывает прогноз на выбранную дату
-          </p>
-        </div>
         <div class="action-with-hint">
           <button
             type="button"

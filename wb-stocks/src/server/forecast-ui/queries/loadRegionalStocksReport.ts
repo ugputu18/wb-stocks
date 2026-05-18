@@ -66,7 +66,21 @@ export function findBaseForecastHorizon(
  * "последний срез" гарантированно прошёл следующий шаг и не привёл к 404 из-за
  * того, что для самой свежей даты есть только нестандартный горизонт.
  */
-export function resolveLatestForecastSnapshotDate(db: DbHandle): string | null {
+export function resolveLatestForecastSnapshotDate(
+  db: DbHandle,
+  horizonDays?: number,
+): string | null {
+  if (horizonDays !== undefined) {
+    const row = db
+      .prepare(
+        `SELECT MAX(snapshot_date) AS d
+           FROM wb_forecast_snapshots
+          WHERE horizon_days = ?`,
+      )
+      .get(horizonDays) as { d: string | null } | undefined;
+    const d = row?.d?.trim();
+    return d && d.length > 0 ? d : null;
+  }
   const row = db
     .prepare(
       `SELECT MAX(snapshot_date) AS d
@@ -212,6 +226,7 @@ export function loadRegionalStocksReport(
   const report = buildRegionalStocksReport({
     snapshotDate,
     horizonDays: q.horizonDays,
+    stockScope: q.stockScope,
     macroRegion: q.macroRegion,
     targetCoverageDays: q.targetCoverageDays,
     riskStockout: q.riskStockout,

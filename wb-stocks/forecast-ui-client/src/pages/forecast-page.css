@@ -18,6 +18,88 @@
   min-height: 1.25rem;
 }
 
+/* --- System navigation -------------------------------------------------- */
+
+.system-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 1rem;
+  margin-top: 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--fu-border);
+  border-radius: 8px;
+  background: var(--fu-panel);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.system-nav + .top {
+  margin-top: 0.9rem;
+}
+
+.system-nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.system-nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.85rem;
+  padding: 0.28rem 0.5rem;
+  border-radius: 6px;
+  color: var(--fu-muted);
+  text-decoration: none;
+  font-size: 0.84rem;
+  line-height: 1.2;
+}
+
+.system-nav-link:hover {
+  color: var(--fu-link-hover);
+  background: var(--fu-brand-soft);
+}
+
+.system-nav-link-active {
+  color: var(--fu-brand-on-soft);
+  background: var(--fu-brand-soft);
+  font-weight: 650;
+}
+
+.system-nav-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.system-nav-date {
+  color: var(--fu-muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.system-nav-recalculate {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 720px) {
+  .system-nav {
+    align-items: flex-start;
+  }
+
+  .system-nav-meta {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+}
+
 /*
  * FiltersForm layout + chips + calc-params block: Panda recipes
  * (`filterFormRow`, `filterField`, `quickFilters*`, `quickFilterChip`, `calcParams*`).

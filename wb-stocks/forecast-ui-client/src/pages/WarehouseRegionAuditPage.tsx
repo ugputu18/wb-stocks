@@ -1,6 +1,6 @@
 import type { JSX } from "preact";
 import { useCallback, useMemo, useState } from "preact/hooks";
-import { FORECAST_UI_SPA_ROUTES } from "../routes.js";
+import { ForecastSystemNav } from "../components/ForecastSystemNav.js";
 import { fetchWarehouseRegionAudit, ForecastApiError } from "../api/client.js";
 import type { WarehouseRegionAuditResponse } from "../api/types.js";
 import { defaultFormState, formStateFromSearchParams } from "../state/urlState.js";
@@ -13,23 +13,21 @@ function initForm() {
 
 export function WarehouseRegionAuditPage(): JSX.Element {
   const [form, setForm] = useState(initForm);
-  const [apiToken, setApiToken] = useState("");
   const [data, setData] = useState<WarehouseRegionAuditResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const sp = useMemo(() => {
     const p = new URLSearchParams();
-    p.set("snapshotDate", form.snapshotDate);
     p.set("horizonDays", form.horizonDays);
     return p;
-  }, [form.snapshotDate, form.horizonDays]);
+  }, [form.horizonDays]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchWarehouseRegionAudit(sp, apiToken);
+      const res = await fetchWarehouseRegionAudit(sp);
       setData(res);
     } catch (e) {
       setData(null);
@@ -43,21 +41,15 @@ export function WarehouseRegionAuditPage(): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [sp, apiToken]);
+  }, [sp]);
 
   const t = data?.totals;
 
   return (
     <div class="forecast-next-root warehouse-audit-page">
+      <ForecastSystemNav dataDate={data?.snapshotDate} />
       <header class="top">
         <h1>Аудит маппинга складов → регион</h1>
-        <p class="muted">
-          <a href={FORECAST_UI_SPA_ROUTES.home}>← К прогнозу</a>
-          {" · "}
-          <a href={FORECAST_UI_SPA_ROUTES.redistribution}>Перераспределение</a>
-          {" · "}
-          <a href={FORECAST_UI_SPA_ROUTES.regionalDemandDiagnostics}>Регион vs fulfillment</a>
-        </p>
         <p class="muted warehouse-audit-lede">
           Агрегаты по строкам <code>wb_forecast_snapshots</code> (SKU×склад) для выбранного среза. Склады без
           записи в справочнике дают вклад в «не сопоставлено» и искажают кластерные суммы, пока не добавлены ключи в{" "}
@@ -67,28 +59,6 @@ export function WarehouseRegionAuditPage(): JSX.Element {
 
       <section class="panel warehouse-audit-controls">
         <div class="warehouse-audit-controls-grid">
-          <label>
-            Bearer (FORECAST_UI_TOKEN)
-            <input
-              type="password"
-              value={apiToken}
-              onInput={(e) => setApiToken((e.target as HTMLInputElement).value)}
-              autoComplete="off"
-            />
-          </label>
-          <label>
-            Дата среза
-            <input
-              type="date"
-              value={form.snapshotDate}
-              onInput={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  snapshotDate: (e.target as HTMLInputElement).value,
-                }))
-              }
-            />
-          </label>
           <label>
             Горизонт (дн.)
             <select

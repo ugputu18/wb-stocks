@@ -1,4 +1,5 @@
 import type { ReplenishmentMode } from "../../../domain/multiLevelInventory.js";
+import type { RegionalStocksScope } from "../../../application/buildRegionalStocksReport.js";
 import type {
   ForecastReportFilter,
   ForecastViewMode,
@@ -108,6 +109,29 @@ export function parseOwnWarehouseCode(url: URL): string {
   return raw && raw.length > 0 ? raw : DEFAULT_OWN_WAREHOUSE_CODE;
 }
 
+export function parseRegionalStocksScope(url: URL): RegionalStocksScope {
+  const raw =
+    url.searchParams.get("stockScope")?.trim().toLowerCase() ??
+    url.searchParams.get("scope")?.trim().toLowerCase() ??
+    "";
+  if (
+    raw === "wbwithown" ||
+    raw === "wb-with-own" ||
+    raw === "wb_plus_own" ||
+    raw === "wb+own" ||
+    raw === "wb+warehouse" ||
+    raw === "wb-warehouse" ||
+    raw === "system" ||
+    raw === "systemtotal"
+  ) {
+    return "wbWithOwn";
+  }
+  if (raw === "wb" || raw === "wbtotal" || raw === "wb-network") {
+    return "wb";
+  }
+  return "region";
+}
+
 export function parseQuery(url: URL): ForecastReportFilter & {
   snapshotDate: string;
   horizonDays: number;
@@ -165,6 +189,7 @@ export interface RegionalStocksQuery {
    */
   snapshotDate: string | null;
   horizonDays: number;
+  stockScope: RegionalStocksScope;
   macroRegion: string;
   targetCoverageDays: number;
   riskStockout: RiskStockoutFilter;
@@ -201,10 +226,12 @@ export function parseRegionalStocksQuery(
     return { ok: false, error: "horizonDays (5|10|20) required" };
   }
 
-  const macroRegion = url.searchParams.get("macroRegion")?.trim() ?? "";
-  if (macroRegion === "") {
+  const stockScope = parseRegionalStocksScope(url);
+  const macroRegionRaw = url.searchParams.get("macroRegion")?.trim() ?? "";
+  if (stockScope === "region" && macroRegionRaw === "") {
     return { ok: false, error: "macroRegion required" };
   }
+  const macroRegion = macroRegionRaw || "Центральный";
 
   const targetRaw = url.searchParams.get("targetCoverageDays");
   const targetCoverageDays =
@@ -220,6 +247,7 @@ export function parseRegionalStocksQuery(
     ok: true,
     snapshotDate,
     horizonDays,
+    stockScope,
     macroRegion,
     targetCoverageDays,
     riskStockout: parseRiskStockout(url.searchParams.get("riskStockout")),

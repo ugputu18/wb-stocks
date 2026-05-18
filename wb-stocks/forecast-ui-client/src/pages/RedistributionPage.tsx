@@ -1,6 +1,6 @@
 import type { JSX } from "preact";
 import { useCallback, useMemo, useState } from "preact/hooks";
-import { FORECAST_UI_SPA_ROUTES } from "../routes.js";
+import { ForecastSystemNav } from "../components/ForecastSystemNav.js";
 import {
   defaultFormState,
   formStateFromSearchParams,
@@ -32,7 +32,6 @@ function initForm(): ForecastUrlFormState {
 
 export function RedistributionPage(): JSX.Element {
   const [form, setForm] = useState<ForecastUrlFormState>(initForm);
-  const [apiToken, setApiToken] = useState("");
   const [donorKey, setDonorKey] = useState("");
   const [reserveDaysStr, setReserveDaysStr] = useState("14");
   const [minTransferableStr, setMinTransferableStr] = useState("1");
@@ -57,7 +56,8 @@ export function RedistributionPage(): JSX.Element {
     refreshFromWbError,
     donorSelectKeys,
     warehouseStatsAgeLabel,
-  } = useRedistributionWarehouses(form, apiToken, donorKey, setDonorKey);
+    dataDate,
+  } = useRedistributionWarehouses(form, donorKey, setDonorKey);
 
   const {
     results,
@@ -68,7 +68,6 @@ export function RedistributionPage(): JSX.Element {
     runSearch,
   } = useRedistributionRun({
     form,
-    apiToken,
     donorKey,
     reserveDays,
     minTransferable,
@@ -88,7 +87,6 @@ export function RedistributionPage(): JSX.Element {
     donorSkuTableRows,
   } = useRedistributionDonorSummary(
     form,
-    apiToken,
     donorKey,
     reserveDays,
     minTransferable,
@@ -103,7 +101,7 @@ export function RedistributionPage(): JSX.Element {
     skuNetworkLoading,
     skuNetworkError,
     skuNetworkPanelRef,
-  } = useRedistributionSkuNetwork(form, apiToken, donorKey);
+  } = useRedistributionSkuNetwork(form, donorKey);
 
   const donorLabel = useMemo(() => {
     if (!donorKey) return "";
@@ -177,15 +175,15 @@ export function RedistributionPage(): JSX.Element {
 
   return (
     <div class="forecast-next-root redistribution-page">
+      <ForecastSystemNav
+        dataDate={dataDate}
+        onRecalculate={refreshFromWb}
+        recalculateBusy={refreshFromWbLoading}
+        recalculateDisabled={statsLoading}
+      />
       <header class="top">
         <h1>Перемещение между складами WB</h1>
         <p class="muted">
-          <a href={FORECAST_UI_SPA_ROUTES.home}>← К прогнозу</a>
-          {" · "}
-          <a href={FORECAST_UI_SPA_ROUTES.warehouseRegionAudit}>Аудит маппинга складов → регион</a>
-          {" · "}
-          <a href={FORECAST_UI_SPA_ROUTES.regionalDemandDiagnostics}>Регион vs fulfillment</a>
-          {" · "}
           <strong>Regional</strong> (по умолчанию) — цель перераспределения = <strong>регион</strong>{" "}
           (Σ buyer-region demand); склад внутри региона — операционная деталь.{" "}
           <strong>Fulfillment</strong> — цель = <strong>склад исполнения</strong>. Донор всегда
@@ -196,8 +194,6 @@ export function RedistributionPage(): JSX.Element {
       <RedistributionControlsSection
         form={form}
         patch={patch}
-        apiToken={apiToken}
-        setApiToken={setApiToken}
         donorKey={donorKey}
         setDonorKey={setDonorKey}
         loading={loading}

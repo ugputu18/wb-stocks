@@ -12,8 +12,6 @@ import type { WarehouseOptionStats } from "./redistributionTypes.js";
 export type RedistributionControlsSectionProps = {
   form: ForecastUrlFormState;
   patch: (p: Partial<ForecastUrlFormState>) => void;
-  apiToken: string;
-  setApiToken: (v: string) => void;
   donorKey: string;
   setDonorKey: (v: string) => void;
   loading: boolean;
@@ -41,8 +39,6 @@ export function RedistributionControlsSection(props: RedistributionControlsSecti
   const {
     form,
     patch,
-    apiToken,
-    setApiToken,
     donorKey,
     setDonorKey,
     loading,
@@ -70,24 +66,6 @@ export function RedistributionControlsSection(props: RedistributionControlsSecti
     <Panel class="redistribution-controls">
       <h2>Параметры</h2>
       <div class="redistribution-controls-grid">
-        <label>
-          Bearer (FORECAST_UI_TOKEN)
-          <input
-            type="password"
-            value={apiToken}
-            onInput={(e) => setApiToken((e.target as HTMLInputElement).value)}
-            placeholder="если требуется сервером"
-            autoComplete="off"
-          />
-        </label>
-        <label>
-          Дата среза
-          <input
-            type="date"
-            value={form.snapshotDate}
-            onInput={(e) => patch({ snapshotDate: (e.target as HTMLInputElement).value })}
-          />
-        </label>
         <label>
           Горизонт (дн.)
           <select
@@ -224,7 +202,7 @@ export function RedistributionControlsSection(props: RedistributionControlsSecti
           {warehouseStatsAgeLabel && !statsLoading && !refreshFromWbLoading ? (
             <span
               class="muted redistribution-wb-refresh-meta"
-              title="Момент последнего ответа сервера по суммам Σ local в списке складов (ваши часы). Данные среза — по дате в поле «Дата среза»."
+              title="Момент последнего ответа сервера по суммам Σ local в списке складов (ваши часы). Дата данных показана в верхнем меню."
             >
               Данные обновлены {warehouseStatsAgeLabel}
               <span aria-hidden="true"> · </span>

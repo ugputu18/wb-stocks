@@ -5,7 +5,7 @@ import {
   ForecastApiError,
 } from "../api/client.js";
 import type { RegionalVsWarehouseSummaryResponse } from "../api/types.js";
-import { FORECAST_UI_SPA_ROUTES } from "../routes.js";
+import { ForecastSystemNav } from "../components/ForecastSystemNav.js";
 import { defaultFormState, formStateFromSearchParams } from "../state/urlState.js";
 import { formatNum } from "../utils/forecastFormat.js";
 
@@ -20,23 +20,21 @@ function pct(x: number): string {
 
 export function RegionalDemandDiagnosticsPage(): JSX.Element {
   const [form, setForm] = useState(initForm);
-  const [apiToken, setApiToken] = useState("");
   const [data, setData] = useState<RegionalVsWarehouseSummaryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const sp = useMemo(() => {
     const p = new URLSearchParams();
-    p.set("snapshotDate", form.snapshotDate);
     p.set("horizonDays", form.horizonDays);
     return p;
-  }, [form.snapshotDate, form.horizonDays]);
+  }, [form.horizonDays]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchRegionalVsWarehouseSummary(sp, apiToken);
+      const res = await fetchRegionalVsWarehouseSummary(sp);
       setData(res);
     } catch (e) {
       setData(null);
@@ -50,21 +48,15 @@ export function RegionalDemandDiagnosticsPage(): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [sp, apiToken]);
+  }, [sp]);
 
   const t = data?.totals;
 
   return (
     <div class="forecast-next-root regional-diagnostics-page">
+      <ForecastSystemNav dataDate={data?.snapshotDate} />
       <header class="top">
         <h1>Региональный спрос vs fulfillment по сети</h1>
-        <p class="muted">
-          <a href={FORECAST_UI_SPA_ROUTES.home}>← К прогнозу</a>
-          {" · "}
-          <a href={FORECAST_UI_SPA_ROUTES.redistribution}>Перераспределение</a>
-          {" · "}
-          <a href={FORECAST_UI_SPA_ROUTES.warehouseRegionAudit}>Аудит складов</a>
-        </p>
         <p class="muted regional-diagnostics-lede">
           Сравнение агрегатов без фильтра по SKU:{" "}
           <strong>регион заказа</strong> (снимок <code>wb_region_demand_snapshots</code>, география покупателя) и{" "}
@@ -78,28 +70,6 @@ export function RegionalDemandDiagnosticsPage(): JSX.Element {
 
       <section class="panel regional-diagnostics-controls">
         <div class="regional-diagnostics-controls-grid">
-          <label>
-            Bearer (FORECAST_UI_TOKEN)
-            <input
-              type="password"
-              value={apiToken}
-              onInput={(e) => setApiToken((e.target as HTMLInputElement).value)}
-              autoComplete="off"
-            />
-          </label>
-          <label>
-            Дата снимка регионального спроса
-            <input
-              type="date"
-              value={form.snapshotDate}
-              onInput={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  snapshotDate: (e.target as HTMLInputElement).value,
-                }))
-              }
-            />
-          </label>
           <label>
             Горизонт fulfillment (дн.)
             <select

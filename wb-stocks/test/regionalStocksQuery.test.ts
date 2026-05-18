@@ -14,6 +14,7 @@ describe("parseRegionalStocksQuery", () => {
     if (!q.ok) return;
     expect(q.snapshotDate).toBe("2026-04-18");
     expect(q.horizonDays).toBe(10);
+    expect(q.stockScope).toBe("region");
     expect(q.targetCoverageDays).toBe(42);
     expect(q.riskStockout).toBe("all");
     expect(q.limit).toBe(500);
@@ -71,5 +72,23 @@ describe("parseRegionalStocksQuery", () => {
     expect(
       parseRegionalStocksQuery(url("snapshotDate=2026-04-18&horizonDays=10")).ok,
     ).toBe(false);
+  });
+
+  it("accepts stock scope for WB and WB plus own warehouse", () => {
+    const wb = parseRegionalStocksQuery(
+      url(
+        "horizonDays=10&macroRegion=Центральный&stockScope=wb",
+      ),
+    );
+    expect(wb.ok).toBe(true);
+    if (wb.ok) expect(wb.stockScope).toBe("wb");
+
+    const system = parseRegionalStocksQuery(
+      url(
+        "horizonDays=10&stockScope=wbWithOwn",
+      ),
+    );
+    expect(system.ok).toBe(true);
+    if (system.ok) expect(system.stockScope).toBe("wbWithOwn");
   });
 });

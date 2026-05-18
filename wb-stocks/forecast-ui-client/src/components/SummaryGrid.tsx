@@ -174,7 +174,7 @@ export function SummaryGrid({ data, viewMode }: Props) {
       staleLabel,
       data.staleStockRowCount,
       "",
-      "Строк, у которых дата stock_snapshot_at старше выбранной snapshotDate (построчно или по SKU в режиме WB в целом — см. сервер).",
+      "Строк, у которых дата stock_snapshot_at старше текущего среза прогноза (построчно или по SKU в режиме WB в целом — см. сервер).",
       true,
       "rowCount",
     ),

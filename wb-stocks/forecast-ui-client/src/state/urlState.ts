@@ -2,7 +2,6 @@ import type { ForecastViewMode, SystemQuickFilter } from "../api/types.js";
 
 /** Form/query state aligned with legacy `app.js` + `parseQuery` on server. */
 export interface ForecastUrlFormState {
-  snapshotDate: string;
   horizonDays: string;
   warehouseKey: string;
   q: string;
@@ -33,14 +32,6 @@ const ALLOWED_TARGET_COV = new Set(["30", "45", "60"]);
 
 export const SUPPLIER_LEAD_TIME_MIN = 1;
 export const SUPPLIER_LEAD_TIME_MAX = 1000;
-
-function todayYmd(): string {
-  const d = new Date();
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
 
 function clampIntStr(
   raw: string | null | undefined,
@@ -95,7 +86,6 @@ export function parseSystemQuickFilterParam(
 
 export function defaultFormState(): ForecastUrlFormState {
   return {
-    snapshotDate: todayYmd(),
     horizonDays: "30",
     warehouseKey: "",
     q: "",
@@ -117,11 +107,6 @@ export function formStateFromSearchParams(
   params: URLSearchParams,
 ): ForecastUrlFormState {
   const base = defaultFormState();
-
-  const sd = params.get("snapshotDate")?.trim();
-  if (sd && /^\d{4}-\d{2}-\d{2}$/.test(sd)) {
-    base.snapshotDate = sd;
-  }
 
   const h = params.get("horizonDays")?.trim();
   base.horizonDays = ALLOWED_HORIZON.has(h ?? "") ? h! : "30";
@@ -168,7 +153,7 @@ export function formStateFromSearchParams(
   return base;
 }
 
-/** Same keys as legacy `queryParams()` (for summary + rows + warehouse-keys). */
+/** Query params for summary + rows + warehouse-keys. Date is resolved server-side as latest. */
 export function toSummaryRowsSearchParams(f: ForecastUrlFormState): URLSearchParams {
   const leadTimeDays = clampIntStr(
     f.leadTimeDays,
@@ -177,7 +162,6 @@ export function toSummaryRowsSearchParams(f: ForecastUrlFormState): URLSearchPar
     "45",
   );
   const p = new URLSearchParams({
-    snapshotDate: f.snapshotDate,
     horizonDays: f.horizonDays,
     riskStockout: f.riskStockout,
     targetCoverageDays: f.targetCoverageDays,
@@ -214,7 +198,6 @@ export function toSupplierSearchParams(f: ForecastUrlFormState): URLSearchParams
     "45",
   );
   const p = new URLSearchParams({
-    snapshotDate: f.snapshotDate,
     horizonDays: f.horizonDays,
     targetCoverageDays: f.targetCoverageDays,
     replenishmentMode: f.replenishmentMode,
@@ -232,10 +215,9 @@ export function toSupplierSearchParams(f: ForecastUrlFormState): URLSearchParams
   return p;
 }
 
-/** Minimal params for warehouse-keys (snapshot + horizon only). */
+/** Minimal params for warehouse-keys; snapshot date is resolved server-side as latest. */
 export function toWarehouseKeysSearchParams(f: ForecastUrlFormState): URLSearchParams {
   return new URLSearchParams({
-    snapshotDate: f.snapshotDate,
     horizonDays: f.horizonDays,
   });
 }

@@ -19,7 +19,6 @@ import type { LastRedistributionRun } from "./redistributionTypes.js";
 
 type Params = {
   form: ForecastUrlFormState;
-  apiToken: string;
   donorKey: string;
   reserveDays: number;
   minTransferable: number;
@@ -33,7 +32,6 @@ type Params = {
 
 export function useRedistributionRun({
   form,
-  apiToken,
   donorKey,
   reserveDays,
   minTransferable,
@@ -90,10 +88,8 @@ export function useRedistributionRun({
         try {
           const rd = await fetchRegionalDemand(
             {
-              snapshotDate: L.snapshotDate,
               skus: top.map((s) => ({ nmId: s.nmId, techSize: s.techSize })),
             },
-            apiToken,
           );
           if (cancelled) return;
           const rows = (rd.rows ?? []).map((r) => ({
@@ -142,7 +138,7 @@ export function useRedistributionRun({
     return () => {
       cancelled = true;
     };
-  }, [rankingMode, apiToken, setRankingMode]);
+  }, [rankingMode, setRankingMode]);
 
   const runSearch = useCallback(async () => {
     setError(null);
@@ -160,7 +156,7 @@ export function useRedistributionRun({
     setLoading(true);
     try {
       const sp = toDonorWarehouseRowsParams(form, donorKey);
-      const donorRes = await fetchForecastRows(sp, apiToken);
+      const donorRes = await fetchForecastRows(sp);
       const donorRows = Array.isArray(donorRes.rows) ? donorRes.rows : [];
       if (donorRows.length === 0) {
         setError("Нет строк на выбранном складе — проверьте дату среза и лимит.");
@@ -191,7 +187,7 @@ export function useRedistributionRun({
       const networkBySku = new Map<string, unknown[]>();
       await runConcurrency(top, 5, async (s) => {
         const spSku = toWarehouseRowsForSkuParams(form, String(s.nmId), s.techSize);
-        const res = await fetchForecastRows(spSku, apiToken);
+        const res = await fetchForecastRows(spSku);
         const rows = Array.isArray(res.rows) ? res.rows : [];
         networkBySku.set(`${s.nmId}|${s.techSize}`, rows);
       });
@@ -207,10 +203,8 @@ export function useRedistributionRun({
         try {
           const rd = await fetchRegionalDemand(
             {
-              snapshotDate: form.snapshotDate,
               skus: top.map((s) => ({ nmId: s.nmId, techSize: s.techSize })),
             },
-            apiToken,
           );
           const rows = (rd.rows ?? []).map((r) => ({
             regionKey: r.regionKey,
@@ -229,7 +223,6 @@ export function useRedistributionRun({
 
       lastRunRef.current = {
         donorKey: donorKey.trim(),
-        snapshotDate: form.snapshotDate,
         donorReserveDays: reserveDays,
         targetCoverageDays: Number(form.targetCoverageDays),
         minTransferableUnits: minTransferable,
@@ -289,7 +282,6 @@ export function useRedistributionRun({
     }
   }, [
     form,
-    apiToken,
     donorKey,
     reserveDays,
     minTransferable,

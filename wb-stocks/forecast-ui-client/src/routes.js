@@ -5,6 +5,7 @@
 export const HOME_ROUTE = "/";
 export const REDISTRIBUTION_ROUTE = "/redistribution";
 export const REGIONAL_STOCKS_ROUTE = "/regional-stocks";
+export const MANUFACTURER_ORDER_ROUTE = "/manufacturer-order";
 export const WAREHOUSE_REGION_AUDIT_ROUTE = "/warehouse-region-audit";
 export const REGIONAL_DEMAND_DIAGNOSTICS_ROUTE = "/regional-demand-diagnostics";
 /** Удобный объект для ссылок и сравнения в роутере. */
@@ -12,6 +13,7 @@ export const FORECAST_UI_SPA_ROUTES = {
     home: HOME_ROUTE,
     redistribution: REDISTRIBUTION_ROUTE,
     regionalStocks: REGIONAL_STOCKS_ROUTE,
+    manufacturerOrder: MANUFACTURER_ORDER_ROUTE,
     warehouseRegionAudit: WAREHOUSE_REGION_AUDIT_ROUTE,
     regionalDemandDiagnostics: REGIONAL_DEMAND_DIAGNOSTICS_ROUTE,
 };
@@ -19,6 +21,7 @@ export const FORECAST_UI_SPA_ROUTES = {
 export const FORECAST_UI_SPA_PATHS = [
     REDISTRIBUTION_ROUTE,
     REGIONAL_STOCKS_ROUTE,
+    MANUFACTURER_ORDER_ROUTE,
     WAREHOUSE_REGION_AUDIT_ROUTE,
     REGIONAL_DEMAND_DIAGNOSTICS_ROUTE,
 ];

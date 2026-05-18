@@ -12,7 +12,6 @@ import type { SkuNetworkSelection } from "./redistributionTypes.js";
 
 export function useRedistributionSkuNetwork(
   form: ForecastUrlFormState,
-  apiToken: string,
   donorKey: string,
 ): {
   skuNetworkSelection: SkuNetworkSelection | null;
@@ -32,7 +31,7 @@ export function useRedistributionSkuNetwork(
 
   useEffect(() => {
     skuNetworkCacheRef.current.clear();
-  }, [form.snapshotDate, form.horizonDays, form.targetCoverageDays, form.rowLimit]);
+  }, [form.horizonDays, form.targetCoverageDays, form.rowLimit]);
 
   useEffect(() => {
     setSkuNetworkSelection(null);
@@ -69,7 +68,7 @@ export function useRedistributionSkuNetwork(
           String(skuNetworkSelection.nmId),
           skuNetworkSelection.techSize,
         );
-        const res = await fetchForecastRows(sp, apiToken);
+        const res = await fetchForecastRows(sp);
         if (cancelled) return;
         const rawRows = Array.isArray(res.rows) ? res.rows : [];
         skuNetworkCacheRef.current.set(cacheKey, rawRows);
@@ -95,7 +94,7 @@ export function useRedistributionSkuNetwork(
     return () => {
       cancelled = true;
     };
-  }, [skuNetworkSelection, form, apiToken, donorKey]);
+  }, [skuNetworkSelection, form, donorKey]);
 
   useLayoutEffect(() => {
     if (!skuNetworkSelection || !skuNetworkPanelRef.current) return;

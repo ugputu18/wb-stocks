@@ -10,11 +10,6 @@ import type {
   WarehouseTariffsResponse,
 } from "./types.js";
 
-export interface ApiOptions extends RequestInit {
-  /** Bearer token for FORECAST_UI_TOKEN (optional). */
-  bearerToken?: string;
-}
-
 function humanFetchError(err: unknown): Error {
   const m =
     err && typeof err === "object" && "message" in err
@@ -45,16 +40,11 @@ export class ForecastApiError extends Error {
 
 export async function apiJson<T>(
   path: string,
-  options: ApiOptions = {},
+  options: RequestInit = {},
 ): Promise<T> {
-  const { bearerToken, headers: optHeaders, ...rest } = options;
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    ...(optHeaders as Record<string, string> | undefined),
-  };
-  if (bearerToken?.trim()) {
-    headers.Authorization = `Bearer ${bearerToken.trim()}`;
-  }
+  const { headers: optHeaders, ...rest } = options;
+  const headers = new Headers(optHeaders);
+  if (!headers.has("Accept")) headers.set("Accept", "application/json");
 
   let res: Response;
   try {
@@ -79,7 +69,7 @@ export async function apiJson<T>(
       d && typeof d.error === "string"
         ? d.error
         : res.status === 401
-          ? "Нужен заголовок авторизации: введите Bearer-токен (FORECAST_UI_TOKEN)."
+          ? "Сервер отклонил запрос (401). Проверьте настройки доступа к forecast UI."
           : res.statusText || "Ошибка запроса";
     if (res.status === 503 && d?.code === "WB_TOKEN_MISSING") {
       msg =
@@ -99,51 +89,41 @@ export function buildApiSearchParams(sp: URLSearchParams): string {
 
 export async function fetchForecastSummary(
   sp: URLSearchParams,
-  token?: string,
 ): Promise<ForecastSummaryResponse> {
   return apiJson<ForecastSummaryResponse>(
     `/api/forecast/summary${buildApiSearchParams(sp)}`,
-    { bearerToken: token },
   );
 }
 
 export async function fetchForecastRows(
   sp: URLSearchParams,
-  token?: string,
 ): Promise<ForecastRowsResponse> {
   return apiJson<ForecastRowsResponse>(
     `/api/forecast/rows${buildApiSearchParams(sp)}`,
-    { bearerToken: token },
   );
 }
 
 export async function fetchSupplierReplenishment(
   sp: URLSearchParams,
-  token?: string,
 ): Promise<SupplierReplenishmentResponse> {
   return apiJson<SupplierReplenishmentResponse>(
     `/api/forecast/supplier-replenishment${buildApiSearchParams(sp)}`,
-    { bearerToken: token },
   );
 }
 
 export async function fetchWarehouseKeys(
   sp: URLSearchParams,
-  token?: string,
 ): Promise<WarehouseKeysResponse> {
   return apiJson<WarehouseKeysResponse>(
     `/api/forecast/warehouse-keys${buildApiSearchParams(sp)}`,
-    { bearerToken: token },
   );
 }
 
 export async function fetchRegionalStocks(
   sp: URLSearchParams,
-  token?: string,
 ): Promise<RegionalStocksResponse> {
   return apiJson<RegionalStocksResponse>(
     `/api/forecast/regional-stocks${buildApiSearchParams(sp)}`,
-    { bearerToken: token },
   );
 }
 
@@ -152,54 +132,43 @@ export async function fetchRegionalStocks(
  * фильтров регионального отчёта — UI грузит их один раз при монтировании
  * страницы.
  */
-export async function fetchWarehouseTariffs(
-  token?: string,
-): Promise<WarehouseTariffsResponse> {
-  return apiJson<WarehouseTariffsResponse>("/api/forecast/warehouse-tariffs", {
-    bearerToken: token,
-  });
+export async function fetchWarehouseTariffs(): Promise<WarehouseTariffsResponse> {
+  return apiJson<WarehouseTariffsResponse>("/api/forecast/warehouse-tariffs");
 }
 
 export interface FetchRegionalDemandBody {
-  snapshotDate: string;
+  snapshotDate?: string;
   skus: Array<{ nmId: number; techSize: string }>;
 }
 
 export async function fetchRegionalDemand(
   body: FetchRegionalDemandBody,
-  token?: string,
 ): Promise<RegionalDemandResponse> {
   return apiJson<RegionalDemandResponse>("/api/forecast/regional-demand", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-    bearerToken: token,
   });
 }
 
 export async function fetchWarehouseRegionAudit(
   sp: URLSearchParams,
-  token?: string,
 ): Promise<WarehouseRegionAuditResponse> {
   return apiJson<WarehouseRegionAuditResponse>(
     `/api/forecast/warehouse-region-audit${buildApiSearchParams(sp)}`,
-    { bearerToken: token },
   );
 }
 
 export async function fetchRegionalVsWarehouseSummary(
   sp: URLSearchParams,
-  token?: string,
 ): Promise<RegionalVsWarehouseSummaryResponse> {
   return apiJson<RegionalVsWarehouseSummaryResponse>(
     `/api/forecast/regional-vs-warehouse-summary${buildApiSearchParams(sp)}`,
-    { bearerToken: token },
   );
 }
 
 /**
- * Скачивание файла-выгрузки с сервера прогноза (xlsx). Сохраняет правила
- * legacy `downloadCsv`: пробрасывает Bearer-токен, корректно достаёт имя
+ * Скачивание файла-выгрузки с сервера прогноза (xlsx). Корректно достаёт имя
  * из `Content-Disposition` (включая RFC 5987 `filename*=UTF-8''…` для
  * кириллических регионов) и красиво сообщает об ошибках.
  *
@@ -209,16 +178,12 @@ export async function fetchRegionalVsWarehouseSummary(
  */
 export async function downloadForecastFile(
   path: string,
-  token: string | undefined,
   fallbackFilename: string,
 ): Promise<void> {
   const headers: Record<string, string> = {
     Accept:
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*",
   };
-  if (token?.trim()) {
-    headers.Authorization = `Bearer ${token.trim()}`;
-  }
   let res: Response;
   try {
     res = await fetch(path, { headers });
@@ -254,7 +219,7 @@ export async function downloadForecastFile(
     }
     if (res.status === 401) {
       msg =
-        "Нужен заголовок авторизации: введите Bearer-токен (FORECAST_UI_TOKEN).";
+        "Сервер отклонил экспорт (401). Проверьте настройки доступа к forecast UI.";
     }
     throw new Error(msg);
   }
@@ -302,7 +267,6 @@ export interface UploadOwnStocksParams {
 export async function uploadOwnStocksCsv(
   file: File,
   params: UploadOwnStocksParams,
-  token?: string,
 ): Promise<UploadOwnStocksResponse> {
   const sp = new URLSearchParams();
   sp.set("filename", file.name);
@@ -312,9 +276,6 @@ export async function uploadOwnStocksCsv(
     "Content-Type": "text/csv; charset=utf-8",
     Accept: "application/json",
   };
-  if (token?.trim()) {
-    headers.Authorization = `Bearer ${token.trim()}`;
-  }
   let res: Response;
   try {
     res = await fetch(`/api/forecast/upload-own-stocks?${sp.toString()}`, {
@@ -339,7 +300,7 @@ export async function uploadOwnStocksCsv(
     const msg =
       (d && typeof d.error === "string" && d.error) ||
       (res.status === 401
-        ? "Нужен заголовок авторизации: введите Bearer-токен (FORECAST_UI_TOKEN)."
+        ? "Сервер отклонил загрузку (401). Проверьте настройки доступа к forecast UI."
         : res.statusText || "Ошибка загрузки");
     throw new ForecastApiError(msg, res.status);
   }
@@ -347,19 +308,17 @@ export async function uploadOwnStocksCsv(
 }
 
 export interface RecalculateBody {
-  snapshotDate: string;
-  horizons: number[];
+  snapshotDate?: string;
+  horizons?: number[];
   dryRun?: boolean;
 }
 
 export async function postForecastRecalculate(
   body: RecalculateBody,
-  token?: string,
 ): Promise<unknown> {
   return apiJson<unknown>("/api/forecast/recalculate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-    bearerToken: token,
   });
 }

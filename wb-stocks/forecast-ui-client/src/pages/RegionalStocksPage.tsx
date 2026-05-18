@@ -5,12 +5,14 @@ import {
   fetchRegionalStocks,
   fetchWarehouseTariffs,
   ForecastApiError,
+  postForecastRecalculate,
 } from "../api/client.js";
 import type {
   RegionalStocksResponse,
+  RegionalStocksScope,
   WarehouseTariff,
 } from "../api/types.js";
-import { FORECAST_UI_SPA_ROUTES } from "../routes.js";
+import { ForecastSystemNav } from "../components/ForecastSystemNav.js";
 import { defaultFormState, formStateFromSearchParams } from "../state/urlState.js";
 import {
   WB_MACRO_REGION_CLUSTERS,
@@ -33,6 +35,7 @@ type TargetCoverage = "14" | "30" | "42" | "60";
 
 interface RegionalStocksForm {
   horizonDays: string;
+  stockScope: RegionalStocksScope;
   macroRegion: string;
   targetCoverageDays: TargetCoverage;
   riskStockout: RiskFilter;
@@ -42,6 +45,15 @@ interface RegionalStocksForm {
 const MACRO_REGION_OPTIONS = Array.from(
   new Set(WB_MACRO_REGION_CLUSTERS.flatMap((c) => c.macroRegions)),
 );
+
+function parseStockScope(raw: string | null): RegionalStocksScope {
+  const t = raw?.trim().toLowerCase() ?? "";
+  if (t === "wb") return "wb";
+  if (t === "wbwithown" || t === "system" || t === "systemtotal") {
+    return "wbWithOwn";
+  }
+  return "region";
+}
 
 function initForm(): RegionalStocksForm {
   const base =
@@ -55,13 +67,22 @@ function initForm(): RegionalStocksForm {
   const macro = params.get("macroRegion")?.trim();
   const target = params.get("targetCoverageDays")?.trim();
   const incomingDays = params.get("horizonDays")?.trim();
+  const macroRegion =
+    macro && MACRO_REGION_OPTIONS.includes(macro) ? macro : "Центральный";
+  const stockScopeParam = params.get("stockScope");
+  const stockScope =
+    stockScopeParam !== null
+      ? parseStockScope(stockScopeParam)
+      : macro && MACRO_REGION_OPTIONS.includes(macro)
+        ? "region"
+        : "wb";
   return {
     horizonDays:
       incomingDays === "5" || incomingDays === "10" || incomingDays === "20"
         ? incomingDays
         : "10",
-    macroRegion:
-      macro && MACRO_REGION_OPTIONS.includes(macro) ? macro : "Центральный",
+    stockScope,
+    macroRegion,
     targetCoverageDays:
       target === "14" ||
       target === "30" ||
@@ -87,7 +108,8 @@ function buildSearchParams(form: RegionalStocksForm): URLSearchParams {
   // резолвит MAX(snapshot_date).
   const p = new URLSearchParams();
   p.set("horizonDays", form.horizonDays);
-  p.set("macroRegion", form.macroRegion);
+  p.set("stockScope", form.stockScope);
+  if (form.stockScope === "region") p.set("macroRegion", form.macroRegion);
   p.set("targetCoverageDays", form.targetCoverageDays);
   p.set("riskStockout", form.riskStockout);
   p.set("limit", "500");
@@ -159,10 +181,63 @@ function formatWarehouseHint(w: WarehouseHintEntry): string {
   return `${base} (${formatRouble(w.boxDeliveryBase)}\u00A0₽)`;
 }
 
+function stockScopeLabel(
+  scope: RegionalStocksScope,
+  macroRegion = "Регион",
+): string {
+  switch (scope) {
+    case "wb":
+      return "WB";
+    case "wbWithOwn":
+      return "WB + склад";
+    case "region":
+    default:
+      return macroRegion;
+  }
+}
+
+function availabilityTitle(scope: RegionalStocksScope): string {
+  switch (scope) {
+    case "wb":
+      return "Остаток WB по всей сети + поставки в пути в выбранном горизонте";
+    case "wbWithOwn":
+      return "Остаток WB по всей сети + поставки в пути + наш локальный склад";
+    case "region":
+    default:
+      return "Остаток WB на складах региона + поставки в пути в выбранном горизонте";
+  }
+}
+
+function needSummaryLabel(scope: RegionalStocksScope): string {
+  switch (scope) {
+    case "wb":
+      return "Нужно на WB";
+    case "wbWithOwn":
+      return "Нужно WB + склад";
+    case "region":
+    default:
+      return "Нужно в регион";
+  }
+}
+
+function stockRegionSelectValue(form: RegionalStocksForm): string {
+  return form.stockScope === "region" ? form.macroRegion : form.stockScope;
+}
+
+function patchForStockRegionSelectValue(
+  value: string,
+): Partial<RegionalStocksForm> {
+  if (value === "wb" || value === "wbWithOwn") {
+    return { stockScope: value };
+  }
+  return { stockScope: "region", macroRegion: value };
+}
+
 export function RegionalStocksPage(): JSX.Element {
   const [form, setForm] = useState<RegionalStocksForm>(initForm);
   const [data, setData] = useState<RegionalStocksResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [recalculateBusy, setRecalculateBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warehouseTariffs, setWarehouseTariffs] = useState<
@@ -253,17 +328,38 @@ export function RegionalStocksPage(): JSX.Element {
       const datePart = data?.snapshotDate ?? "latest";
       await downloadForecastFile(
         `/api/forecast/export-regional-stocks${qs ? `?${qs}` : ""}`,
-        undefined,
-        `regional-stocks-${form.macroRegion}-${datePart}-h${form.horizonDays}.xlsx`,
+        `stocks-${stockScopeLabel(form.stockScope, form.macroRegion)}-${datePart}-h${form.horizonDays}.xlsx`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setExporting(false);
     }
-  }, [data?.snapshotDate, form.horizonDays, form.macroRegion, sp]);
+  }, [data?.snapshotDate, form.horizonDays, form.stockScope, sp]);
+
+  const recalculate = useCallback(async () => {
+    setRecalculateBusy(true);
+    setError(null);
+    try {
+      await postForecastRecalculate({
+        horizons: [30],
+        dryRun: false,
+      });
+      await load();
+    } catch (e) {
+      setError("Пересчёт: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setRecalculateBusy(false);
+    }
+  }, [load]);
 
   const summary = data?.summary;
+  const activeStockScope = data?.stockScope ?? form.stockScope;
+  const activeScopeLabel = stockScopeLabel(
+    activeStockScope,
+    data?.macroRegion ?? form.macroRegion,
+  );
+  const activeAvailabilityTitle = availabilityTitle(activeStockScope);
   const orderableRowCount = useMemo(
     () => data?.rows.filter((r) => r.recommendedOrderQty > 0).length ?? 0,
     [data],
@@ -290,57 +386,71 @@ export function RegionalStocksPage(): JSX.Element {
 
   return (
     <div class="forecast-next-root regional-stocks-page">
+      <ForecastSystemNav
+        dataDate={data?.snapshotDate}
+        onRecalculate={recalculate}
+        recalculateBusy={recalculateBusy}
+        recalculateDisabled={loading}
+      />
       <header class="top">
-        <h1>Запасы WB по региону</h1>
-        <p class="muted">
-          <a href={FORECAST_UI_SPA_ROUTES.home}>← К прогнозу</a>
-          {" · "}
-          <a href={FORECAST_UI_SPA_ROUTES.redistribution}>Перераспределение</a>
-          {" · "}
-          <a href={FORECAST_UI_SPA_ROUTES.regionalDemandDiagnostics}>Регион vs fulfillment</a>
-        </p>
+        <h1>Запасы</h1>
       </header>
 
       <section class="panel regional-stocks-controls">
         <div class="regional-stocks-controls-grid">
           <div class="regional-stocks-row">
             <label class="regional-stocks-region-field">
-              Регион для оценки
+              <LabelWithInlineHelp>
+                Регион для оценки
+                <HelpToggle label="Регион для оценки">
+                  WB считает всю сеть маркетплейса без нашего склада. WB + склад
+                  добавляет локальный склад в доступный запас. Региональные
+                  варианты считают остатки и спрос выбранного макрорегиона.
+                </HelpToggle>
+              </LabelWithInlineHelp>
               <select
-                value={form.macroRegion}
+                value={stockRegionSelectValue(form)}
                 onChange={(e) =>
-                  patch({ macroRegion: (e.target as HTMLSelectElement).value })
+                  patch(
+                    patchForStockRegionSelectValue(
+                      (e.target as HTMLSelectElement).value,
+                    ),
+                  )
                 }
               >
+                <option value="wb">WB</option>
+                <option value="wbWithOwn">WB + склад</option>
                 {MACRO_REGION_OPTIONS.map((r) => (
                   <option key={r} value={r}>
                     {r}
                   </option>
                 ))}
               </select>
-              <small
-                class="regional-stocks-warehouse-hint muted"
-                title={
-                  hasAnyTariff
-                    ? "Склады выбранного макрорегиона, отсортированные от самого дешёвого к самому дорогому. В скобках — базовый тариф WB за коробку минимального объёма (FBO). Виртуальные склады исключены."
-                    : "Эти склады входят в выбранный макрорегион и учитываются в столбце «Доступно в регионе» (виртуальные склады исключены, как и в самом отчёте). Цены тарифов появятся после запуска pnpm update:wb-tariffs."
-                }
-              >
-                {regionWarehouses.length > 0 ? (
-                  <>
-                    <span class="regional-stocks-warehouse-hint-label">
-                      Склады региона ({regionWarehouses.length}
-                      {tariffDate && hasAnyTariff
-                        ? `, тариф на ${tariffDate}`
-                        : ""}
-                      ):
-                    </span>{" "}
-                    {regionWarehouses.map(formatWarehouseHint).join(", ")}
-                  </>
-                ) : (
-                  "Склады не найдены"
-                )}
-              </small>
+              {form.stockScope === "region" ? (
+                <small
+                  class="regional-stocks-warehouse-hint muted"
+                  title={
+                    hasAnyTariff
+                      ? "Склады выбранного макрорегиона, отсортированные от самого дешёвого к самому дорогому. В скобках — базовый тариф WB за коробку минимального объёма (FBO). Виртуальные склады исключены."
+                      : "Эти склады входят в выбранный макрорегион и учитываются в столбце «Доступно» (виртуальные склады исключены, как и в самом отчёте). Цены тарифов появятся после запуска pnpm update:wb-tariffs."
+                  }
+                >
+                  {regionWarehouses.length > 0 ? (
+                    <>
+                      <span class="regional-stocks-warehouse-hint-label">
+                        Склады региона ({regionWarehouses.length}
+                        {tariffDate && hasAnyTariff
+                          ? `, тариф на ${tariffDate}`
+                          : ""}
+                        ):
+                      </span>{" "}
+                      {regionWarehouses.map(formatWarehouseHint).join(", ")}
+                    </>
+                  ) : (
+                    "Склады не найдены"
+                  )}
+                </small>
+              ) : null}
             </label>
           </div>
           <div class="regional-stocks-row">
@@ -350,7 +460,7 @@ export function RegionalStocksPage(): JSX.Element {
                 <HelpToggle label="В пути за">
                   Горизонт учёта входящих WB-поставок: сколько дней вперёд от
                   даты среза суммируем единицы со статусами «создана / в пути
-                  / приёмка». Влияет на колонку «Доступно в регионе».
+                  / приёмка». Влияет на колонку «Доступно».
                 </HelpToggle>
               </LabelWithInlineHelp>
               <select
@@ -368,8 +478,8 @@ export function RegionalStocksPage(): JSX.Element {
               <LabelWithInlineHelp>
                 Цель
                 <HelpToggle label="Цель">
-                  Целевое покрытие региона в днях. Колонка «Нужно» = max(0,
-                  цель × «Спрос/день» − «Доступно в регионе»); от неё же
+                  Целевое покрытие в днях. Колонка «Нужно» = max(0,
+                  цель × «Спрос/день» − «Доступно»); от неё же
                   зависит «Заказ» = min(Нужно, Склад).
                 </HelpToggle>
               </LabelWithInlineHelp>
@@ -442,7 +552,7 @@ export function RegionalStocksPage(): JSX.Element {
 
       {summary ? (
         <section class="panel regional-stocks-summary">
-          <h2>Сводка региона</h2>
+          <h2>Сводка: {activeScopeLabel}</h2>
           <div class="summary-grid summary-grid-operational">
             {summaryCell("Строк SKU", summary.totalRows)}
             {summaryCell("< 7 дн.", summary.risk.critical, "risk-critical")}
@@ -450,7 +560,7 @@ export function RegionalStocksPage(): JSX.Element {
             {summaryCell("< 30 дн.", summary.risk.attention, "risk-attention")}
             {summaryCell("OK ≥30", summary.risk.ok, "risk-ok")}
             {summaryCell(
-              "Нужно в регион",
+              needSummaryLabel(activeStockScope),
               formatInt(summary.recommendedToRegionTotal),
             )}
             {summaryCell(
@@ -469,7 +579,7 @@ export function RegionalStocksPage(): JSX.Element {
         <section class="panel regional-stocks-table-panel">
           <div class="regional-stocks-table-header">
             <h2>
-              {data.macroRegion} · срез {data.snapshotDate} · цель{" "}
+              {activeStockScope === "region" ? data.macroRegion : activeScopeLabel} · цель{" "}
               {data.targetCoverageDays} дн.
             </h2>
             <div class="regional-stocks-table-actions">
@@ -500,17 +610,17 @@ export function RegionalStocksPage(): JSX.Element {
                     <th>vendor</th>
                     <th>nm_id</th>
                     <th>Размер</th>
-                    <th>Доступно в регионе</th>
+                    <th title={activeAvailabilityTitle}>Доступно</th>
                     <th>Спрос/день</th>
                     <th>Дней запаса</th>
                     <th>OOS</th>
-                    <th title="Сколько единиц нужно довезти в регион, чтобы закрыть целевое покрытие">
+                    <th title={`Сколько единиц не хватает в контуре «${activeScopeLabel}», чтобы закрыть целевое покрытие`}>
                       Нужно
                     </th>
                     <th title={`Остаток на нашем складе «${data.ownWarehouseCode}» по vendor_code`}>
                       Склад
                     </th>
-                    <th title="Заказ = min(Нужно, Склад) — сколько реально можно отгрузить под потребность региона">
+                    <th title={`Заказ = min(Нужно, Склад) — сколько реально можно отгрузить под потребность «${activeScopeLabel}»`}>
                       Заказ
                     </th>
                   </tr>
@@ -526,7 +636,7 @@ export function RegionalStocksPage(): JSX.Element {
                       <td>{r.vendorCode ?? ""}</td>
                       <td>{r.nmId}</td>
                       <td>{r.techSize}</td>
-                      <td title="Остаток WB на складах региона + поставки в пути в выбранном горизонте">
+                      <td title={activeAvailabilityTitle}>
                         {formatInt(r.regionalAvailable)}
                       </td>
                       <td>{formatNum(r.regionalForecastDailyDemand)}</td>

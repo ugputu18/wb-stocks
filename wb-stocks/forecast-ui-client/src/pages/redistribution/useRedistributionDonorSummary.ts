@@ -13,7 +13,6 @@ import {
 
 export function useRedistributionDonorSummary(
   form: ForecastUrlFormState,
-  apiToken: string,
   donorKey: string,
   reserveDays: number,
   minTransferable: number,
@@ -52,7 +51,7 @@ export function useRedistributionDonorSummary(
     (async () => {
       try {
         const sp = toDonorWarehouseRowsParams(form, donorKey);
-        const res = await fetchForecastRows(sp, apiToken);
+        const res = await fetchForecastRows(sp);
         if (cancelled) return;
         const rows = Array.isArray(res.rows) ? res.rows : [];
         setDonorRowsRaw(rows);
@@ -77,7 +76,7 @@ export function useRedistributionDonorSummary(
     return () => {
       cancelled = true;
     };
-  }, [form, apiToken, donorKey, reserveDays, minTransferable, reserveOk, minOk]);
+  }, [form, donorKey, reserveDays, minTransferable, reserveOk, minOk]);
 
   const donorSkuTableRows = useMemo((): DonorSkuTableRow[] => {
     if (!donorRowsRaw || !donorKey.trim()) return [];

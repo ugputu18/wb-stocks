@@ -1,5 +1,8 @@
 import type { SupplierSkuReplenishmentReadModel } from "../../../domain/multiLevelInventory.js";
-import type { RegionalStocksReportRow } from "../../../application/buildRegionalStocksReport.js";
+import type {
+  RegionalStocksReportRow,
+  RegionalStocksScope,
+} from "../../../application/buildRegionalStocksReport.js";
 import type {
   SystemTotalBySkuReportRow,
   WbForecastSnapshotReportRow,
@@ -112,7 +115,7 @@ export const REGIONAL_STOCKS_EXPORT_COLUMNS = [
   "vendor",
   "nm_id",
   "Размер",
-  "Доступно в регионе",
+  "Доступно",
   "Спрос/день",
   "Дней запаса",
   "OOS",
@@ -145,9 +148,15 @@ export function regionalStocksXlsxFilename(
   snapshotDate: string,
   horizonDays: number,
   macroRegion: string,
+  stockScope: RegionalStocksScope = "region",
 ): string {
-  const safeMacro = macroRegion.replace(/[\\/:*?"<>|\s]+/g, "_");
-  return `regional-stocks-${safeMacro}-${snapshotDate}-h${horizonDays}.xlsx`;
+  const safeScope =
+    stockScope === "region"
+      ? macroRegion.replace(/[\\/:*?"<>|\s]+/g, "_")
+      : stockScope === "wb"
+        ? "WB"
+        : "WB_plus_sklad";
+  return `stocks-${safeScope}-${snapshotDate}-h${horizonDays}.xlsx`;
 }
 
 /**
@@ -165,7 +174,7 @@ export function regionalStocksRowsToExportObjects(
     vendor: row.vendorCode ?? "",
     nm_id: row.nmId,
     "Размер": row.techSize,
-    "Доступно в регионе": row.regionalAvailable,
+    "Доступно": row.regionalAvailable,
     "Спрос/день": row.regionalForecastDailyDemand,
     "Дней запаса": row.daysOfStockRegional,
     OOS: row.stockoutDateEstimate ?? "",

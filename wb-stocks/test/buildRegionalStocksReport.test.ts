@@ -279,6 +279,103 @@ describe("buildRegionalStocksReport", () => {
     expect(out.rows[0]!.recommendedToRegion).toBe(410);
   });
 
+  it("can aggregate stock and demand across the whole WB network", () => {
+    const out = buildRegionalStocksReport({
+      snapshotDate: "2026-04-18",
+      horizonDays: 30,
+      stockScope: "wb",
+      macroRegion: "Центральный",
+      targetCoverageDays: 10,
+      stockRows: [
+        {
+          warehouseKey: "коледино",
+          nmId: 10,
+          techSize: "",
+          vendorCode: "NET",
+          startStock: 20,
+          incomingUnits: 0,
+          stockSnapshotAt: "2026-04-18T00:00:00Z",
+        },
+        {
+          warehouseKey: "казань",
+          nmId: 10,
+          techSize: "",
+          vendorCode: "NET",
+          startStock: 40,
+          incomingUnits: 0,
+          stockSnapshotAt: "2026-04-18T00:00:00Z",
+        },
+      ],
+      demandRows: [
+        {
+          regionKey: "buyer-central",
+          nmId: 10,
+          techSize: "",
+          vendorCode: "NET",
+          regionalForecastDailyDemand: 10,
+        },
+        {
+          regionKey: "buyer-volga",
+          nmId: 10,
+          techSize: "",
+          vendorCode: "NET",
+          regionalForecastDailyDemand: 20,
+        },
+      ],
+      regionMacroLookup: lookup,
+    });
+
+    expect(out.stockScope).toBe("wb");
+    expect(out.rows).toHaveLength(1);
+    expect(out.rows[0]!.regionalAvailable).toBe(60);
+    expect(out.rows[0]!.regionalForecastDailyDemand).toBe(30);
+    expect(out.rows[0]!.recommendedToRegion).toBe(240);
+  });
+
+  it("can include own warehouse stock in the WB-wide availability assessment", () => {
+    const base = {
+      snapshotDate: "2026-04-18",
+      horizonDays: 30,
+      macroRegion: "Центральный",
+      targetCoverageDays: 10,
+      ownStockByVendor: new Map<string, number>([["SYS", 50]]),
+      stockRows: [
+        {
+          warehouseKey: "коледино",
+          nmId: 11,
+          techSize: "",
+          vendorCode: "SYS",
+          startStock: 20,
+          incomingUnits: 0,
+          stockSnapshotAt: "2026-04-18T00:00:00Z",
+        },
+      ],
+      demandRows: [
+        {
+          regionKey: "buyer-central",
+          nmId: 11,
+          techSize: "",
+          vendorCode: "SYS",
+          regionalForecastDailyDemand: 10,
+        },
+      ],
+      regionMacroLookup: lookup,
+    };
+
+    const wbOnly = buildRegionalStocksReport({ ...base, stockScope: "wb" });
+    const withOwn = buildRegionalStocksReport({
+      ...base,
+      stockScope: "wbWithOwn",
+    });
+
+    expect(wbOnly.rows[0]!.regionalAvailable).toBe(20);
+    expect(wbOnly.rows[0]!.recommendedToRegion).toBe(80);
+    expect(withOwn.stockScope).toBe("wbWithOwn");
+    expect(withOwn.rows[0]!.ownWarehouseStock).toBe(50);
+    expect(withOwn.rows[0]!.regionalAvailable).toBe(70);
+    expect(withOwn.rows[0]!.recommendedToRegion).toBe(30);
+  });
+
   it("applies risk, search, and limit filters after calculation", () => {
     const out = buildRegionalStocksReport({
       snapshotDate: "2026-04-18",

@@ -4,7 +4,10 @@ import { json } from "../http/json.js";
 import { sendXlsxAttachment } from "../http/sendXlsxAttachment.js";
 import { parseQuery, parseRegionalStocksQuery } from "../parse/forecastQuery.js";
 import { parseRequiredTargetCoverageDays } from "../parse/exportQuery.js";
-import { loadRegionalStocksReport } from "../queries/loadRegionalStocksReport.js";
+import {
+  loadRegionalStocksReport,
+  resolveLatestForecastSnapshotDate,
+} from "../queries/loadRegionalStocksReport.js";
 import {
   forecastSupplierXlsxFilename,
   forecastWbXlsxFilename,
@@ -23,6 +26,32 @@ import {
 import type { ForecastUiHandlerDeps } from "../types.js";
 import type { ForecastRouteMatch } from "../routes/routeTypes.js";
 
+function resolveForecastSnapshotDate(
+  deps: ForecastUiHandlerDeps,
+  snapshotDateRaw: string,
+  horizonDays: number,
+): { ok: true; snapshotDate: string } | { ok: false; status: number; error: string } {
+  if (!Number.isInteger(horizonDays) || horizonDays <= 0) {
+    return { ok: false, status: 400, error: "horizonDays required" };
+  }
+  if (snapshotDateRaw !== "") {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(snapshotDateRaw)) {
+      return { ok: false, status: 400, error: "snapshotDate must be YYYY-MM-DD" };
+    }
+    return { ok: true, snapshotDate: snapshotDateRaw };
+  }
+  const latest = resolveLatestForecastSnapshotDate(deps.db, horizonDays);
+  if (latest === null) {
+    return {
+      ok: false,
+      status: 404,
+      error:
+        "No forecast snapshots found in DB for requested horizon (run sales forecast MVP first)",
+    };
+  }
+  return { ok: true, snapshotDate: latest };
+}
+
 /**
  * Экспорт прогнозных отчётов в XLSX.
  *
@@ -40,10 +69,12 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
       handle: async (req, res, url) => {
         void req;
         const q = parseQuery(url);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(q.snapshotDate) || !Number.isInteger(q.horizonDays) || q.horizonDays <= 0) {
-          json(res, 400, { ok: false, error: "snapshotDate and horizonDays required" });
+        const resolved = resolveForecastSnapshotDate(deps, q.snapshotDate, q.horizonDays);
+        if (!resolved.ok) {
+          json(res, resolved.status, { ok: false, error: resolved.error });
           return;
         }
+        const snapshotDate = resolved.snapshotDate;
         const filter: ForecastReportFilter = {
           warehouseKey: q.warehouseKey,
           q: q.q,
@@ -63,7 +94,7 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
             ? await toXlsxBuffer(
                 wbReportRowsToExportObjects(
                   forecastReportQuery.listReportRows(
-                    q.snapshotDate,
+                    snapshotDate,
                     q.horizonDays,
                     filter,
                     undefined,
@@ -76,7 +107,7 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
               ? await toXlsxBuffer(
                   systemTotalRowsToExportObjects(
                     forecastReportQuery.listSystemTotalBySkuReportRows(
-                      q.snapshotDate,
+                      snapshotDate,
                       q.horizonDays,
                       filter,
                       undefined,
@@ -88,7 +119,7 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
               : await toXlsxBuffer(
                   wbTotalRowsToExportObjects(
                     forecastReportQuery.listWbTotalBySkuReportRows(
-                      q.snapshotDate,
+                      snapshotDate,
                       q.horizonDays,
                       filter,
                       undefined,
@@ -99,7 +130,7 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
                 );
         sendXlsxAttachment(
           res,
-          forecastWbXlsxFilename(q.snapshotDate, q.horizonDays),
+          forecastWbXlsxFilename(snapshotDate, q.horizonDays),
           buffer,
         );
       },
@@ -110,10 +141,16 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
       handle: async (req, res, url) => {
         void req;
         const q = parseQuery(url);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(q.snapshotDate) || !Number.isInteger(q.horizonDays) || q.horizonDays <= 0) {
-          json(res, 400, { ok: false, error: "snapshotDate and horizonDays required" });
+        if (!Number.isInteger(q.horizonDays) || q.horizonDays <= 0) {
+          json(res, 400, { ok: false, error: "horizonDays required" });
           return;
         }
+        const resolved = resolveForecastSnapshotDate(deps, q.snapshotDate, q.horizonDays);
+        if (!resolved.ok) {
+          json(res, resolved.status, { ok: false, error: resolved.error });
+          return;
+        }
+        const snapshotDate = resolved.snapshotDate;
         const tc = parseRequiredTargetCoverageDays(url);
         if (tc === null) {
           json(res, 400, {
@@ -134,12 +171,18 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
           supplierSafetyDays: q.supplierSafetyDays,
           viewMode: q.viewMode,
         };
-        const supplierRows = forecastReportQuery.listSupplierReplenishmentBySku(
-          q.snapshotDate,
+        let supplierRows = forecastReportQuery.listSupplierReplenishmentBySku(
+          snapshotDate,
           q.horizonDays,
           supplierFilter,
           tc,
         );
+        const onlyOrder = ["1", "true", "yes"].includes(
+          url.searchParams.get("onlyOrder")?.trim().toLowerCase() ?? "",
+        );
+        if (onlyOrder) {
+          supplierRows = supplierRows.filter((r) => r.recommendedOrderQty > 0);
+        }
         const buffer = await toXlsxBuffer(
           supplierRowsToExportObjects(supplierRows, tc),
           [...SUPPLIER_EXPORT_COLUMNS],
@@ -147,7 +190,7 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
         );
         sendXlsxAttachment(
           res,
-          forecastSupplierXlsxFilename(q.snapshotDate, q.horizonDays),
+          forecastSupplierXlsxFilename(snapshotDate, q.horizonDays),
           buffer,
         );
       },
@@ -188,6 +231,7 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
             outcome.report.snapshotDate,
             outcome.report.horizonDays,
             outcome.report.macroRegion,
+            outcome.report.stockScope,
           ),
           buffer,
         );

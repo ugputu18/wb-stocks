@@ -11,9 +11,38 @@ import {
   parseRegionalStocksQuery,
   parseRowsLimit,
 } from "../parse/forecastQuery.js";
-import { loadRegionalStocksReport } from "../queries/loadRegionalStocksReport.js";
+import {
+  loadRegionalStocksReport,
+  resolveLatestForecastSnapshotDate,
+} from "../queries/loadRegionalStocksReport.js";
 import type { ForecastUiHandlerDeps } from "../types.js";
 import type { ForecastRouteMatch } from "../routes/routeTypes.js";
+
+function resolveForecastSnapshotDate(
+  deps: ForecastUiHandlerDeps,
+  snapshotDateRaw: string,
+  horizonDays: number,
+): { ok: true; snapshotDate: string } | { ok: false; status: number; error: string } {
+  if (!Number.isInteger(horizonDays) || horizonDays <= 0) {
+    return { ok: false, status: 400, error: "horizonDays required" };
+  }
+  if (snapshotDateRaw !== "") {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(snapshotDateRaw)) {
+      return { ok: false, status: 400, error: "snapshotDate must be YYYY-MM-DD" };
+    }
+    return { ok: true, snapshotDate: snapshotDateRaw };
+  }
+  const latest = resolveLatestForecastSnapshotDate(deps.db, horizonDays);
+  if (latest === null) {
+    return {
+      ok: false,
+      status: 404,
+      error:
+        "No forecast snapshots found in DB for requested horizon (run sales forecast MVP first)",
+    };
+  }
+  return { ok: true, snapshotDate: latest };
+}
 
 export function createForecastReadRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMatch[] {
   const { forecastRepo, forecastReportQuery } = deps;
@@ -25,15 +54,20 @@ export function createForecastReadRoutes(deps: ForecastUiHandlerDeps): ForecastR
       handle: (req, res, url) => {
         void req;
         const q = parseQuery(url);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(q.snapshotDate) || !Number.isInteger(q.horizonDays) || q.horizonDays <= 0) {
-          json(res, 400, { ok: false, error: "snapshotDate and horizonDays required" });
+        const resolved = resolveForecastSnapshotDate(deps, q.snapshotDate, q.horizonDays);
+        if (!resolved.ok) {
+          json(res, resolved.status, { ok: false, error: resolved.error });
           return;
         }
         const warehouseKeys = forecastRepo.distinctWarehouseKeys(
-          q.snapshotDate,
+          resolved.snapshotDate,
           q.horizonDays,
         );
-        json(res, 200, { warehouseKeys });
+        json(res, 200, {
+          snapshotDate: resolved.snapshotDate,
+          horizonDays: q.horizonDays,
+          warehouseKeys,
+        });
       },
     },
     {
@@ -41,10 +75,12 @@ export function createForecastReadRoutes(deps: ForecastUiHandlerDeps): ForecastR
       handle: (req, res, url) => {
         void req;
         const q = parseQuery(url);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(q.snapshotDate) || !Number.isInteger(q.horizonDays) || q.horizonDays <= 0) {
-          json(res, 400, { ok: false, error: "snapshotDate and horizonDays required" });
+        const resolved = resolveForecastSnapshotDate(deps, q.snapshotDate, q.horizonDays);
+        if (!resolved.ok) {
+          json(res, resolved.status, { ok: false, error: resolved.error });
           return;
         }
+        const snapshotDate = resolved.snapshotDate;
         const limit = parseRowsLimit(url);
         const filter: ForecastReportFilter = {
           warehouseKey: q.warehouseKey,
@@ -63,26 +99,26 @@ export function createForecastReadRoutes(deps: ForecastUiHandlerDeps): ForecastR
         const rows =
           q.viewMode === "wbWarehouses"
             ? forecastReportQuery.listReportRows(
-                q.snapshotDate,
+                snapshotDate,
                 q.horizonDays,
                 filter,
                 limit,
               )
             : q.viewMode === "systemTotal"
               ? forecastReportQuery.listSystemTotalBySkuReportRows(
-                  q.snapshotDate,
+                  snapshotDate,
                   q.horizonDays,
                   filter,
                   limit,
                 )
               : forecastReportQuery.listWbTotalBySkuReportRows(
-                  q.snapshotDate,
+                  snapshotDate,
                   q.horizonDays,
                   filter,
                   limit,
                 );
         json(res, 200, {
-          snapshotDate: q.snapshotDate,
+          snapshotDate,
           horizonDays: q.horizonDays,
           viewMode: q.viewMode,
           systemTotalQuickFilter: q.systemTotalQuickFilter,
@@ -100,10 +136,12 @@ export function createForecastReadRoutes(deps: ForecastUiHandlerDeps): ForecastR
       handle: (req, res, url) => {
         void req;
         const q = parseQuery(url);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(q.snapshotDate) || !Number.isInteger(q.horizonDays) || q.horizonDays <= 0) {
-          json(res, 400, { ok: false, error: "snapshotDate and horizonDays required" });
+        const resolved = resolveForecastSnapshotDate(deps, q.snapshotDate, q.horizonDays);
+        if (!resolved.ok) {
+          json(res, resolved.status, { ok: false, error: resolved.error });
           return;
         }
+        const snapshotDate = resolved.snapshotDate;
         const filter: ForecastReportFilter = {
           warehouseKey: q.warehouseKey,
           q: q.q,
@@ -119,12 +157,12 @@ export function createForecastReadRoutes(deps: ForecastUiHandlerDeps): ForecastR
           systemTotalQuickFilter: q.systemTotalQuickFilter,
         };
         const agg = forecastReportQuery.aggregateReportMetrics(
-          q.snapshotDate,
+          snapshotDate,
           q.horizonDays,
           filter,
         );
         json(res, 200, {
-          snapshotDate: q.snapshotDate,
+          snapshotDate,
           horizonDays: q.horizonDays,
           viewMode: q.viewMode,
           systemTotalQuickFilter: q.systemTotalQuickFilter,
@@ -150,10 +188,16 @@ export function createForecastReadRoutes(deps: ForecastUiHandlerDeps): ForecastR
       handle: (req, res, url) => {
         void req;
         const q = parseQuery(url);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(q.snapshotDate) || !Number.isInteger(q.horizonDays) || q.horizonDays <= 0) {
-          json(res, 400, { ok: false, error: "snapshotDate and horizonDays required" });
+        if (!Number.isInteger(q.horizonDays) || q.horizonDays <= 0) {
+          json(res, 400, { ok: false, error: "horizonDays required" });
           return;
         }
+        const resolved = resolveForecastSnapshotDate(deps, q.snapshotDate, q.horizonDays);
+        if (!resolved.ok) {
+          json(res, resolved.status, { ok: false, error: resolved.error });
+          return;
+        }
+        const snapshotDate = resolved.snapshotDate;
         const tc = q.replenishmentTargetCoverageDays;
         if (tc === undefined || !Number.isFinite(tc) || tc <= 0) {
           json(res, 400, {
@@ -175,13 +219,13 @@ export function createForecastReadRoutes(deps: ForecastUiHandlerDeps): ForecastR
           viewMode: q.viewMode,
         };
         const supplierRows = forecastReportQuery.listSupplierReplenishmentBySku(
-          q.snapshotDate,
+          snapshotDate,
           q.horizonDays,
           supplierFilter,
           tc,
         );
         json(res, 200, {
-          snapshotDate: q.snapshotDate,
+          snapshotDate,
           horizonDays: q.horizonDays,
           targetCoverageDays: tc,
           leadTimeDays: q.supplierLeadTimeDays,
@@ -258,9 +302,21 @@ export function createForecastReadRoutes(deps: ForecastUiHandlerDeps): ForecastR
           return;
         }
         const b = body && typeof body === "object" ? (body as Record<string, unknown>) : null;
-        const snapshotDate = typeof b?.snapshotDate === "string" ? b.snapshotDate.trim() : "";
+        const snapshotDateRaw =
+          typeof b?.snapshotDate === "string" ? b.snapshotDate.trim() : "";
+        const snapshotDate =
+          snapshotDateRaw !== ""
+            ? snapshotDateRaw
+            : resolveLatestForecastSnapshotDate(deps.db);
+        if (snapshotDate === null) {
+          json(res, 404, {
+            ok: false,
+            error: "No forecast snapshots found in DB (run sales forecast MVP first)",
+          });
+          return;
+        }
         if (!/^\d{4}-\d{2}-\d{2}$/.test(snapshotDate)) {
-          json(res, 400, { ok: false, error: "snapshotDate (YYYY-MM-DD) required" });
+          json(res, 400, { ok: false, error: "snapshotDate must be YYYY-MM-DD" });
           return;
         }
         const skusRaw = b?.skus;

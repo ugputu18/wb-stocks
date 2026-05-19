@@ -36,7 +36,9 @@ export function ActionsBar(props: ActionsBarProps): JSX.Element {
           >
             {actionBusy === "export-wb" ? "Экспорт…" : "Скачать WB Excel"}
           </button>
-          <ActionHint>Выгружает текущую таблицу поставок на WB (XLSX)</ActionHint>
+          <ActionHint>
+            Выгружает текущую таблицу поставок на WB (XLSX)
+          </ActionHint>
         </div>
         <div class="action-with-hint">
           <button
@@ -44,9 +46,13 @@ export function ActionsBar(props: ActionsBarProps): JSX.Element {
             disabled={uiBlocked || supCount === 0}
             onClick={() => void onExportSupplier()}
           >
-            {actionBusy === "export-supplier" ? "Экспорт…" : "Скачать Supplier Excel"}
+            {actionBusy === "export-supplier"
+              ? "Экспорт…"
+              : "Скачать Supplier Excel"}
           </button>
-          <ActionHint>Выгружает текущий список закупки у производителя (XLSX)</ActionHint>
+          <ActionHint>
+            Выгружает текущий список закупки у производителя (XLSX)
+          </ActionHint>
         </div>
         <div class="action-with-hint">
           <button
@@ -56,12 +62,12 @@ export function ActionsBar(props: ActionsBarProps): JSX.Element {
           >
             {actionBusy === "upload-own-stocks"
               ? "Загрузка…"
-              : "Загрузить остатки CSV"}
+              : "Загрузить остатки"}
           </button>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             style={{ display: "none" }}
             onChange={(ev) => {
               const input = ev.currentTarget as HTMLInputElement;
@@ -71,8 +77,8 @@ export function ActionsBar(props: ActionsBarProps): JSX.Element {
             }}
           />
           <ActionHint>
-            CSV остатков нашего склада. Колонки определяются по содержимому
-            (артикул продавца / артикул WB / остаток).
+            CSV или Excel остатков нашего склада. Колонки определяются по
+            содержимому (артикул продавца / артикул WB / остаток).
           </ActionHint>
         </div>
       </div>

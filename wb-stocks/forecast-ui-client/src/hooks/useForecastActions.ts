@@ -23,7 +23,10 @@ function fallbackWbXlsxName(snapshotDate: string, horizonDays: string): string {
   return `wb-replenishment-${snapshotDate}-h${horizonDays}.xlsx`;
 }
 
-function fallbackSupplierXlsxName(snapshotDate: string, horizonDays: string): string {
+function fallbackSupplierXlsxName(
+  snapshotDate: string,
+  horizonDays: string,
+): string {
   return `supplier-replenishment-${snapshotDate}-h${horizonDays}.xlsx`;
 }
 
@@ -47,13 +50,27 @@ export function useForecastActions(params: UseForecastActionsParams) {
     try {
       const h = Number(form.horizonDays);
       clearQDebounce();
-      await postForecastRecalculate({
+      const recalc = await postForecastRecalculate({
         horizons: [Number.isFinite(h) && h > 0 ? h : 30],
         dryRun: false,
       });
       const r = await reload(form);
       if (r.ok && !isStale(r)) {
         syncUrlReplace(form);
+        const own = recalc.result.ownStockImport;
+        const ownError = recalc.result.ownStockImportError;
+        if (ownError) {
+          setStatusTone("error");
+          setStatusLine(
+            `Пересчёт выполнен, склад OptiCore не обновился: ${ownError}`,
+          );
+        } else if (own) {
+          setStatusTone("default");
+          setStatusLine(
+            `Пересчёт выполнен · склад ${own.warehouseCode}: ${own.inserted} строк ` +
+              `(пропущено ${own.skipped}, отфильтровано ${own.filteredOut}).`,
+          );
+        }
       } else if (!r.ok && !isStale(r) && "message" in r) {
         setStatusTone("error");
         setStatusLine("Пересчёт: " + r.message);
@@ -116,23 +133,21 @@ export function useForecastActions(params: UseForecastActionsParams) {
       setStatusLine(`Загрузка остатков из «${file.name}»…`);
       try {
         const warehouse = form.ownWarehouseCode.trim();
-        const result = await uploadOwnStocksCsv(
-          file,
-          {
-            warehouse: warehouse ? warehouse : undefined,
-          },
-        );
+        const result = await uploadOwnStocksCsv(file, {
+          warehouse: warehouse ? warehouse : undefined,
+        });
         const det = result.detection;
         const cols = [
           det.vendorColumn ? `vendor=«${det.vendorColumn}»` : null,
           det.wbColumn ? `WB=«${det.wbColumn}»` : null,
           det.quantityColumn ? `остаток=«${det.quantityColumn}»` : null,
+          det.unitColumn ? `ед.=«${det.unitColumn}»` : null,
         ]
           .filter(Boolean)
           .join(", ");
         const summary =
           `Остатки загружены: ${result.inserted} строк ` +
-          `(пропущено ${result.skipped}, ${
+          `(пропущено ${result.skipped}, отфильтровано ${result.filteredOut}, ${
             result.wasUpdate ? "обновлено" : "создано"
           } за ${result.snapshotDate}` +
           `${cols ? `; колонки: ${cols}` : ""}).`;

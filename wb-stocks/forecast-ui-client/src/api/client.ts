@@ -242,13 +242,17 @@ export interface UploadOwnStocksResponse {
   fetched: number;
   skipped: number;
   inserted: number;
+  filteredOut: number;
   wasUpdate: boolean;
   durationMs: number;
   detection: {
     vendorColumn: string | null;
     wbColumn: string | null;
     quantityColumn: string | null;
+    unitColumn: string | null;
     delimiter: string;
+    format: "csv" | "spreadsheet";
+    sheetName: string | null;
   };
   issues: Array<{ lineNumber: number; reason: string; raw: unknown }>;
 }
@@ -261,8 +265,8 @@ export interface UploadOwnStocksParams {
 }
 
 /**
- * Upload an "our warehouse" stocks CSV to the forecast UI server. Column
- * meanings are auto-detected on the server (see `parseOwnStockCsv`).
+ * Upload an "our warehouse" stocks file to the forecast UI server. CSV, XLS,
+ * and XLSX are accepted; column meanings are auto-detected on the server.
  */
 export async function uploadOwnStocksCsv(
   file: File,
@@ -273,7 +277,7 @@ export async function uploadOwnStocksCsv(
   if (params.date) sp.set("date", params.date);
   if (params.warehouse) sp.set("warehouse", params.warehouse);
   const headers: Record<string, string> = {
-    "Content-Type": "text/csv; charset=utf-8",
+    "Content-Type": file.type || contentTypeForOwnStocksFile(file.name),
     Accept: "application/json",
   };
   let res: Response;
@@ -307,16 +311,39 @@ export async function uploadOwnStocksCsv(
   return data as UploadOwnStocksResponse;
 }
 
+function contentTypeForOwnStocksFile(filename: string): string {
+  if (/\.xlsx$/iu.test(filename)) {
+    return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  }
+  if (/\.xls$/iu.test(filename)) return "application/vnd.ms-excel";
+  return "text/csv; charset=utf-8";
+}
+
 export interface RecalculateBody {
   snapshotDate?: string;
   horizons?: number[];
   dryRun?: boolean;
+  refreshOwnStock?: boolean;
+}
+
+export interface RecalculateResponse {
+  ok: true;
+  result: {
+    ownStockImport?: {
+      snapshotDate: string;
+      warehouseCode: string;
+      inserted: number;
+      skipped: number;
+      filteredOut: number;
+    } | null;
+    ownStockImportError?: string | null;
+  };
 }
 
 export async function postForecastRecalculate(
   body: RecalculateBody,
-): Promise<unknown> {
-  return apiJson<unknown>("/api/forecast/recalculate", {
+): Promise<RecalculateResponse> {
+  return apiJson<RecalculateResponse>("/api/forecast/recalculate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

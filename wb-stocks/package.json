@@ -12,6 +12,7 @@
     "import:own-stocks": "node --env-file=.env --import tsx scripts/import-own-warehouse-state.ts",
     "update:wb-supplies": "node --env-file=.env --import tsx scripts/update-wb-supplies.ts",
     "update:wb-tariffs": "node --env-file=.env --import tsx scripts/update-wb-tariffs.ts",
+    "export:opticore-stock": "node --env-file=.env --import tsx scripts/export-opticore-stock.ts",
     "report:warehouse-tariffs": "node --env-file=.env --import tsx scripts/report-warehouse-tariffs.ts",
     "forecast:sales-mvp": "node --env-file=.env --import tsx scripts/run-sales-forecast-mvp.ts",
     "serve:forecast-ui": "node --env-file=.env --import tsx scripts/serve-forecast-ui.ts",
@@ -33,6 +34,7 @@
     "csv-parse": "^6.2.1",
     "exceljs": "^4.4.0",
     "pino": "^10.3.1",
+    "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {

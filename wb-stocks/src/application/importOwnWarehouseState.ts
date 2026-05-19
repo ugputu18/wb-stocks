@@ -7,7 +7,7 @@ import {
   type OwnStockSnapshotRecord,
 } from "../domain/ownStockSnapshot.js";
 import {
-  parseOwnStockCsv,
+  parseOwnStockInput,
   type OwnStockCsvDetection,
   type OwnStockCsvParseIssue,
 } from "./parseOwnStockCsv.js";
@@ -43,11 +43,13 @@ export interface ImportOwnWarehouseStateResult {
   fetched: number;
   skipped: number;
   inserted: number;
+  /** Rows intentionally ignored, e.g. duplicated box/package rows. */
+  filteredOut: number;
   wasUpdate: boolean;
   durationMs: number;
-  /** Auto-detected column meanings (see `parseOwnStockCsv`). */
+  /** Auto-detected column meanings (see `parseOwnStockInput`). */
   detection: OwnStockCsvDetection;
-  /** Per-row parse issues; same shape as `parseOwnStockCsv` issues. */
+  /** Per-row parse issues; same shape as `parseOwnStockInput` issues. */
   issues: OwnStockCsvParseIssue[];
 }
 
@@ -57,9 +59,10 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  * Use case: "snapshot the state of our warehouse on a given calendar date".
  *
  * Meaning of "state on date" in this project: the balance of each SKU in the
- * warehouse as recorded in the CSV file produced for that date (see
- * `store/our<MMDD>.csv`). There is no movement/transaction history inside
- * the project to compute state from — the CSV is authoritative.
+ * warehouse as recorded in the import file produced for that date (see
+ * `store/our<MMDD>.csv` and Sku Simple `.xls` exports). There is no
+ * movement/transaction history inside the project to compute state from —
+ * the import file is authoritative.
  *
  * Idempotency model: replace-for-date (see {@link OwnStockSnapshotRepository.replaceForDate}).
  */
@@ -73,9 +76,7 @@ export async function importOwnWarehouseState(
 
   const snapshotDate = options.date ?? todayLocalYmd(now());
   if (!DATE_RE.test(snapshotDate)) {
-    throw new Error(
-      `Invalid date "${snapshotDate}": expected YYYY-MM-DD`,
-    );
+    throw new Error(`Invalid date "${snapshotDate}": expected YYYY-MM-DD`);
   }
   const warehouseCode = options.warehouseCode ?? DEFAULT_WAREHOUSE_CODE;
   const sourceFile = resolve(
@@ -93,7 +94,10 @@ export async function importOwnWarehouseState(
   const wasUpdate = existing > 0;
 
   const buf = await read(sourceFile);
-  const { rows, issues, detection } = parseOwnStockCsv(buf);
+  const { rows, issues, detection, filteredOut } = parseOwnStockInput(
+    buf,
+    sourceFile,
+  );
 
   for (const issue of issues) {
     logger.warn(
@@ -124,8 +128,9 @@ export async function importOwnWarehouseState(
       snapshotDate,
       warehouseCode,
       sourceFile,
-      fetched: rows.length + issues.length,
+      fetched: rows.length + issues.length + filteredOut,
       skipped: issues.length,
+      filteredOut,
       inserted,
       wasUpdate,
       durationMs,
@@ -139,8 +144,9 @@ export async function importOwnWarehouseState(
     snapshotDate,
     warehouseCode,
     sourceFile,
-    fetched: rows.length + issues.length,
+    fetched: rows.length + issues.length + filteredOut,
     skipped: issues.length,
+    filteredOut,
     inserted,
     wasUpdate,
     durationMs,

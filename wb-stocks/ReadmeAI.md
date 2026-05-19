@@ -28,13 +28,13 @@
 `wb-stocks` хранит **исторические снапшоты остатков** в локальной SQLite-базе.
 Сейчас три независимых источника данных:
 
-| Источник | Откуда берётся | Use case | CLI |
-|---|---|---|---|
-| WB stocks | WB Statistics API | `importWbStocks` | `pnpm import:stocks` |
-| Собственный склад | CSV `store/our<MMDD>.csv` | `importOwnWarehouseState` | `pnpm import:own-stocks` |
-| WB поставки FBW | WB FBW Supplies API (3 эндпойнта) | `importWbSupplies` | `pnpm update:wb-supplies` |
-| WB sales forecast MVP | orders + demand snapshot + stocks + supplies | `runSalesForecastMvp` | `pnpm forecast:sales-mvp` |
-| Локальный forecast UI (MVP) | Preact UI на **`/`** (единственный экран), JSON API без изменений | `startForecastUiServer` | `pnpm serve:forecast-ui` |
+| Источник                    | Откуда берётся                                                    | Use case                  | CLI                       |
+| --------------------------- | ----------------------------------------------------------------- | ------------------------- | ------------------------- |
+| WB stocks                   | WB Statistics API                                                 | `importWbStocks`          | `pnpm import:stocks`      |
+| Собственный склад           | CSV `store/our<MMDD>.csv`, Sku Simple XLS/XLSX                    | `importOwnWarehouseState` | `pnpm import:own-stocks`  |
+| WB поставки FBW             | WB FBW Supplies API (3 эндпойнта)                                 | `importWbSupplies`        | `pnpm update:wb-supplies` |
+| WB sales forecast MVP       | orders + demand snapshot + stocks + supplies                      | `runSalesForecastMvp`     | `pnpm forecast:sales-mvp` |
+| Локальный forecast UI (MVP) | Preact UI на **`/`** (единственный экран), JSON API без изменений | `startForecastUiServer`   | `pnpm serve:forecast-ui`  |
 
 Имя `wb-stocks` оставлено историческим — WB был первым источником. Сейчас
 модуль умышленно объединяет **несколько источников остатков в одной базе**,
@@ -243,11 +243,11 @@ CREATE TABLE wb_supply_status_history (
 pipeline. Их выбор не случайный — он отражает то, как соответствующие
 данные меняются во времени:
 
-| Pipeline | Модель | Где реализована | Почему именно так |
-|---|---|---|---|
-| WB stocks | INSERT-only с DB-unique key, `INSERT OR IGNORE` | `StockSnapshotRepository.saveBatch` | каждый запуск = новый `snapshotAt` = новая серия строк, нужна полная история во времени |
-| Own warehouse | Replace-for-date (DELETE + INSERT в одной tx) | `OwnStockSnapshotRepository.replaceForDate` | per-day снапшоты, оператор переимпортирует тот же день — должна получиться **ровно та картина, что в CSV**, без merge-сюрпризов |
-| WB supplies | Upsert by `supply_id` + replace items + append-on-change history | `WbSupplyRepository.{upsertSupply, replaceItemsForSupply, appendStatusHistoryIfChanged}` | поставка — долгоживущая сущность с переходами статуса; нужна и текущая картина, и переходы |
+| Pipeline      | Модель                                                           | Где реализована                                                                          | Почему именно так                                                                                                               |
+| ------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| WB stocks     | INSERT-only с DB-unique key, `INSERT OR IGNORE`                  | `StockSnapshotRepository.saveBatch`                                                      | каждый запуск = новый `snapshotAt` = новая серия строк, нужна полная история во времени                                         |
+| Own warehouse | Replace-for-date (DELETE + INSERT в одной tx)                    | `OwnStockSnapshotRepository.replaceForDate`                                              | per-day снапшоты, оператор переимпортирует тот же день — должна получиться **ровно та картина, что в CSV**, без merge-сюрпризов |
+| WB supplies   | Upsert by `supply_id` + replace items + append-on-change history | `WbSupplyRepository.{upsertSupply, replaceItemsForSupply, appendStatusHistoryIfChanged}` | поставка — долгоживущая сущность с переходами статуса; нужна и текущая картина, и переходы                                      |
 
 Никогда не путать эти модели. Если добавится новый pipeline — выбирать
 тот же шаблон, не изобретать новый.
@@ -277,8 +277,9 @@ pipeline. Их выбор не случайный — он отражает то
 2. Маппер в `src/application/...` — `safeParse` → возвращает
    discriminated union:
    ```ts
-   type MapResult<T> = { ok: true; record: T }
-                     | { ok: false; reason: string; raw: unknown };
+   type MapResult<T> =
+     | { ok: true; record: T }
+     | { ok: false; reason: string; raw: unknown };
    ```
 3. Use case логирует `{ reason, raw }` на `warn` и пропускает строку,
    остальные строки продолжают обрабатываться. Битая строка **не валит**
@@ -296,15 +297,15 @@ pipeline. Их выбор не случайный — он отражает то
 
 Конкретно:
 
-| Ошибка | Что делаем |
-|---|---|
-| Не валидный env (zod) | бросаем, процесс падает с ненулевым exit |
-| Сеть/HTTP на главной ручке pipeline (`getSupplierStocks`, `listSupplies`, `readFile` для CSV) | бросаем — без главного запроса делать нечего |
-| Сеть на per-row обогащении (`getSupplyDetails`, `getSupplyGoods`) | `error`-лог + счётчик `*Failed`, заголовок всё равно сохраняется (с null-полями), остальные поставки продолжают обрабатываться |
-| Битая строка ответа (zod fail) | `warn`-лог + счётчик `skipped*` |
-| Ошибка при upsert одной строки в DB | `error`-лог, остальные строки продолжают |
-| HTTP 4xx, кроме 429 | бросаем, **не ретраим** — это баг запроса, не сети |
-| HTTP 429/5xx/timeout | автоматический ретрай с backoff (см. [`docs/wb-api.md`](./docs/wb-api.md) §1.3) |
+| Ошибка                                                                                        | Что делаем                                                                                                                     |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Не валидный env (zod)                                                                         | бросаем, процесс падает с ненулевым exit                                                                                       |
+| Сеть/HTTP на главной ручке pipeline (`getSupplierStocks`, `listSupplies`, `readFile` для CSV) | бросаем — без главного запроса делать нечего                                                                                   |
+| Сеть на per-row обогащении (`getSupplyDetails`, `getSupplyGoods`)                             | `error`-лог + счётчик `*Failed`, заголовок всё равно сохраняется (с null-полями), остальные поставки продолжают обрабатываться |
+| Битая строка ответа (zod fail)                                                                | `warn`-лог + счётчик `skipped*`                                                                                                |
+| Ошибка при upsert одной строки в DB                                                           | `error`-лог, остальные строки продолжают                                                                                       |
+| HTTP 4xx, кроме 429                                                                           | бросаем, **не ретраим** — это баг запроса, не сети                                                                             |
+| HTTP 429/5xx/timeout                                                                          | автоматический ретрай с backoff (см. [`docs/wb-api.md`](./docs/wb-api.md) §1.3)                                                |
 
 CLI ловит финальный throw и выставляет `process.exitCode = 1`, чтобы
 шедулер мог это увидеть.
@@ -319,7 +320,7 @@ CLI ловит финальный throw и выставляет `process.exitCod
   — для удобства ручного запуска.
 - Структура результата всегда плоская и с консистентными именами
   `fetched / mapped / skipped / inserted / created / updated /
-  unchanged / durationMs / dryRun`. Это критично — оперативная аналитика
+unchanged / durationMs / dryRun`. Это критично — оперативная аналитика
   упирается в эти числа.
 
 ### 4.6 Конвенция CLI
@@ -337,7 +338,7 @@ CLI ловит финальный throw и выставляет `process.exitCod
 > **Грабля pnpm:** `pnpm <script> -- --foo=bar` ненадёжно пробрасывает
 > аргументы (зависит от версии). Если флаги не доходят, запускайте
 > скрипт прямо: `node --env-file=.env --import tsx
-> scripts/update-wb-supplies.ts --from=2026-04-01 --dry-run`.
+scripts/update-wb-supplies.ts --from=2026-04-01 --dry-run`.
 
 ### 4.7 Тестирование
 
@@ -353,14 +354,14 @@ CLI ловит финальный throw и выставляет `process.exitCod
 
 ### 4.8 Зависимости и почему именно они
 
-| Пакет | Зачем |
-|---|---|
-| `better-sqlite3` | синхронный SQLite — простая транзакционная семантика, не нужен async-хайлайт |
-| `csv-parse` | проверенный CSV-парсер с `bom: true`, `relax_column_count: true` под кривые операторские CSV |
-| `pino` | структурный JSON-логгер, дешёвый |
-| `zod` | валидация env + входящих API/CSV строк |
-| `tsx` (dev) | запуск .ts напрямую без сборки — каждый CLI стартует одной командой |
-| `vitest` (dev) | тесты, без babel-овой обвязки |
+| Пакет            | Зачем                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| `better-sqlite3` | синхронный SQLite — простая транзакционная семантика, не нужен async-хайлайт                 |
+| `csv-parse`      | проверенный CSV-парсер с `bom: true`, `relax_column_count: true` под кривые операторские CSV |
+| `pino`           | структурный JSON-логгер, дешёвый                                                             |
+| `zod`            | валидация env + входящих API/CSV строк                                                       |
+| `tsx` (dev)      | запуск .ts напрямую без сборки — каждый CLI стартует одной командой                          |
+| `vitest` (dev)   | тесты, без babel-овой обвязки                                                                |
 
 Намеренно **нет** `dotenv` — `node --env-file=.env` встроен в Node 20.6+.
 Намеренно **нет** `axios` — нативный `fetch` в Node 22 покрывает всё, что
@@ -413,15 +414,16 @@ CLI: src/cli/importStocks.ts
 
 ## 6. Pipeline 2 — Own warehouse state (собственный склад)
 
-**Что делает.** Импортирует «состояние нашего склада на дату» из CSV в
-формате `store/our<MMDD>.csv`. Один день = один снапшот.
+**Что делает.** Импортирует «состояние нашего склада на дату» из CSV
+формата `store/our<MMDD>.csv` или Sku Simple XLS/XLSX. Один день = один
+снапшот.
 
 **Семантика «состояние на дату».** В проекте **нет таблицы движений
 товара** (приходов/расходов/перемещений), поэтому состояние на дату не
 рассчитывается из движений. Текущая семантика — **ровно то, что в
-CSV-файле, подготовленном оператором для этой даты**. Если когда-нибудь
-появятся движения, snapshot-таблица не изменится — в ней всегда
-итоговое состояние.
+файле импорта, подготовленном оператором для этой даты**. Если
+когда-нибудь появятся движения, snapshot-таблица не изменится — в ней
+всегда итоговое состояние.
 
 **Источник данных.**
 
@@ -433,12 +435,15 @@ CSV-файле, подготовленном оператором для это�
   `Артикул → vendor_code` и `Остаток → quantity`. Колонки
   `Потребность*` — плановые наложения, **не** часть состояния склада, в
   снапшот не попадают.
+- Для Sku Simple XLS/XLSX используем колонки `Артикул` и `Остаток, шт`.
+  Строки с коробами фильтруются как дубли: если остаток содержит `кор`
+  или колонка `Единица измерения` не равна `шт`, строка не импортируется.
 
-**Правила парсинга** (`parseOwnStockCsv`, согласованы с
+**Правила парсинга** (`parseOwnStockInput` / `parseOwnStockCsv`, согласованы с
 `store/update_our0418_wb56.py :: parse_int`):
 
 - пустой `Остаток` → `0`;
-- `"1 234"` и `"1,5"` нормализуются (`1234`, `1`);
+- `"1 234"`, `"1,5"` и `"1 234 шт"` нормализуются (`1234`, `1`, `1234`);
 - строка без `Артикул` → пропуск с `warn` (в операторских CSV в конце
   обычно пустые строки и строка-итог типа `43,157 pcs` — их тут и
   ловим).
@@ -452,10 +457,10 @@ CLI: scripts/import-own-warehouse-state.ts
        1. snapshotDate = options.date ?? today (LOCAL, не UTC — это календарная дата оператора)
        2. resolve sourceFile (по конвенции из date, либо явный --file)
        3. existing = repository.countForDate(...)   — для флага wasUpdate
-       4. parseOwnStockCsv(buffer)                   — { rows, issues }
+       4. parseOwnStockInput(buffer, sourceFile)      — { rows, issues, filteredOut }
        5. records = rows.map(...)
        6. repository.replaceForDate(...)             — DELETE + INSERT в одной tx
-       7. return { ..., wasUpdate, fetched, skipped, inserted, durationMs }
+       7. return { ..., wasUpdate, fetched, skipped, filteredOut, inserted, durationMs }
 ```
 
 **Идемпотентность.** §4.1, replace-for-date. Перезапуск за тот же
@@ -588,22 +593,40 @@ CLI: scripts/update-wb-supplies.ts
 **Пример выхода (реальный прод-прогон, 4 поставки за 17 дней).**
 
 Первый запуск:
+
 ```json
 {
-  "dateFrom": "2026-04-01", "dateTo": "2026-04-17",
-  "fetchedRows": 4, "validRows": 4, "skippedRows": 0, "preorderOnly": 0,
-  "created": 4, "updated": 0, "unchanged": 0, "statusChanged": 4,
-  "detailsFetched": 4, "detailsFailed": 0,
-  "itemsFetched": 4, "itemsFailed": 0, "itemsTotal": 120,
-  "durationMs": 5068, "dryRun": false
+  "dateFrom": "2026-04-01",
+  "dateTo": "2026-04-17",
+  "fetchedRows": 4,
+  "validRows": 4,
+  "skippedRows": 0,
+  "preorderOnly": 0,
+  "created": 4,
+  "updated": 0,
+  "unchanged": 0,
+  "statusChanged": 4,
+  "detailsFetched": 4,
+  "detailsFailed": 0,
+  "itemsFetched": 4,
+  "itemsFailed": 0,
+  "itemsTotal": 120,
+  "durationMs": 5068,
+  "dryRun": false
 }
 ```
 
 Повторный запуск без изменений:
+
 ```json
 {
-  "created": 0, "updated": 0, "unchanged": 4, "statusChanged": 0,
-  "detailsFetched": 4, "itemsFetched": 4, "itemsTotal": 120,
+  "created": 0,
+  "updated": 0,
+  "unchanged": 4,
+  "statusChanged": 0,
+  "detailsFetched": 4,
+  "itemsFetched": 4,
+  "itemsTotal": 120,
   "durationMs": 13804
 }
 ```
@@ -628,7 +651,7 @@ CLI: scripts/update-wb-supplies.ts
   `factDate`, пагинация (1001 запись = 2 страницы), `dryRun` ничего не
   пишет, per-supply ошибки `details/goods` не валят весь импорт,
   ошибка `listSupplies` всё-таки роняет весь run, дефолт `dateFrom =
-  today − 30d`.
+today − 30d`.
 
 ## 8. Окружение и запуск
 
@@ -653,13 +676,13 @@ cp .env.example .env
 
 ### 8.3 Env
 
-| Переменная | Описание | По умолчанию |
-|---|---|---|
-| `WB_TOKEN` | Seller-токен. Scope Statistics для stocks, Marketplace для supplies. | — (опционально, нужен только для WB-flow) |
-| `WB_STATS_BASE_URL` | База WB Statistics API | `https://statistics-api.wildberries.ru` |
-| `WB_SUPPLIES_BASE_URL` | База WB FBW Supplies API | `https://supplies-api.wildberries.ru` |
-| `DATABASE_PATH` | Путь к SQLite-файлу | `./data/wb-stocks.sqlite` |
-| `LOG_LEVEL` | Уровень pino-логов | `info` |
+| Переменная             | Описание                                                             | По умолчанию                              |
+| ---------------------- | -------------------------------------------------------------------- | ----------------------------------------- |
+| `WB_TOKEN`             | Seller-токен. Scope Statistics для stocks, Marketplace для supplies. | — (опционально, нужен только для WB-flow) |
+| `WB_STATS_BASE_URL`    | База WB Statistics API                                               | `https://statistics-api.wildberries.ru`   |
+| `WB_SUPPLIES_BASE_URL` | База WB FBW Supplies API                                             | `https://supplies-api.wildberries.ru`     |
+| `DATABASE_PATH`        | Путь к SQLite-файлу                                                  | `./data/wb-stocks.sqlite`                 |
+| `LOG_LEVEL`            | Уровень pino-логов                                                   | `info`                                    |
 
 ### 8.4 Команды
 
@@ -720,7 +743,7 @@ const r3 = await importWbSupplies(
   `update:wb-supplies` после старого билда → в БД остались устаревшие
   таблицы поставок с предыдущей итерации схемы. Удалить:
   `sqlite3 data/wb-stocks.sqlite 'DROP TABLE wb_supply_status_history;
-  DROP TABLE wb_supply_items; DROP TABLE wb_supplies;'` — миграции
+DROP TABLE wb_supply_items; DROP TABLE wb_supplies;'` — миграции
   пересоздадут их.
 
 ## 9. Тесты
@@ -738,15 +761,15 @@ pnpm typecheck       # tsc --noEmit
 
 **Не входит в скоуп модуля:**
 
-| Что | Почему |
-|---|---|
-| Каталог / цены (`category, subject, brand, Price, Discount`) | другая задача — каталог-pipeline; zod-схемы намеренно эти поля игнорируют |
-| Аналитика поверх снапшотов | задача Python-скриптов в `store/` (`calculate_*`, `analyze_*`) и/или будущего отчётного модуля |
-| Расчёт ETA / out-of-stock-риска | аналитика поверх таблиц `wb_supplies + wb_stock_snapshots + own_stock_snapshots` — отдельный пайплайн |
-| Шедулер / cron | задача оркестратора (cron, systemd, BullMQ); use case — чистая функция |
-| Запись в `recommendations.csv`-pipeline | независимый источник данных, не мешает существующим расчётам |
-| Управление поставками (создание, изменение состава) | задача оператора в кабинете WB |
-| Preorder-only заявки (statusID=1, без supplyID) | нет стабильного ключа для upsert |
+| Что                                                          | Почему                                                                                                |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| Каталог / цены (`category, subject, brand, Price, Discount`) | другая задача — каталог-pipeline; zod-схемы намеренно эти поля игнорируют                             |
+| Аналитика поверх снапшотов                                   | задача Python-скриптов в `store/` (`calculate_*`, `analyze_*`) и/или будущего отчётного модуля        |
+| Расчёт ETA / out-of-stock-риска                              | аналитика поверх таблиц `wb_supplies + wb_stock_snapshots + own_stock_snapshots` — отдельный пайплайн |
+| Шедулер / cron                                               | задача оркестратора (cron, systemd, BullMQ); use case — чистая функция                                |
+| Запись в `recommendations.csv`-pipeline                      | независимый источник данных, не мешает существующим расчётам                                          |
+| Управление поставками (создание, изменение состава)          | задача оператора в кабинете WB                                                                        |
+| Preorder-only заявки (statusID=1, без supplyID)              | нет стабильного ключа для upsert                                                                      |
 
 **Архитектурные «не делаем»:**
 
@@ -762,14 +785,14 @@ pnpm typecheck       # tsc --noEmit
 
 Места, в которых **уже сейчас известно**, что нужно будет поменять:
 
-| Когда | Что | Где менять |
-|---|---|---|
-| **2026-06-23** | WB отключит `GET /api/v1/supplier/stocks`. Переезжаем на `POST /api/analytics/v1/stocks-report/wb-warehouses` | новый `WbAnalyticsClient` рядом с `WbStatsClient`; `StockSnapshotRecord` менять не надо (поля `barcode`, `supplierArticle`, `inWayTo*`, `quantity_full` уже nullable). См. [`docs/wb-api.md`](./docs/wb-api.md) §2.2 |
-| при появлении 2-го склада | вынести справочник складов в таблицу | `own_stock_snapshots.warehouse_code` уже есть; добавится таблица `warehouses` без миграции снапшотов |
-| при появлении движений товара | альтернативный путь «состояние из движений» | новая таблица движений + use case, **не** меняя `own_stock_snapshots` |
-| если WB добавит новые statusID для поставок | расширить `SUPPLY_STATUS_LABELS` и [`docs/wb-api.md`](./docs/wb-api.md) §3.4 | `src/domain/wbSupply.ts` |
-| если в `wb_supplies` появятся новые «бизнес-поля» | расширить `supplyFieldsDiffer` в `wbSupplyRepository.ts` — иначе они не будут триггерить `updated` | `src/infra/wbSupplyRepository.ts` |
-| если поставки начнут отдавать > 1000 товаров | добавить пагинацию в `getSupplyGoods` | `src/infra/wbSuppliesClient.ts` |
+| Когда                                             | Что                                                                                                           | Где менять                                                                                                                                                                                                           |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **2026-06-23**                                    | WB отключит `GET /api/v1/supplier/stocks`. Переезжаем на `POST /api/analytics/v1/stocks-report/wb-warehouses` | новый `WbAnalyticsClient` рядом с `WbStatsClient`; `StockSnapshotRecord` менять не надо (поля `barcode`, `supplierArticle`, `inWayTo*`, `quantity_full` уже nullable). См. [`docs/wb-api.md`](./docs/wb-api.md) §2.2 |
+| при появлении 2-го склада                         | вынести справочник складов в таблицу                                                                          | `own_stock_snapshots.warehouse_code` уже есть; добавится таблица `warehouses` без миграции снапшотов                                                                                                                 |
+| при появлении движений товара                     | альтернативный путь «состояние из движений»                                                                   | новая таблица движений + use case, **не** меняя `own_stock_snapshots`                                                                                                                                                |
+| если WB добавит новые statusID для поставок       | расширить `SUPPLY_STATUS_LABELS` и [`docs/wb-api.md`](./docs/wb-api.md) §3.4                                  | `src/domain/wbSupply.ts`                                                                                                                                                                                             |
+| если в `wb_supplies` появятся новые «бизнес-поля» | расширить `supplyFieldsDiffer` в `wbSupplyRepository.ts` — иначе они не будут триггерить `updated`            | `src/infra/wbSupplyRepository.ts`                                                                                                                                                                                    |
+| если поставки начнут отдавать > 1000 товаров      | добавить пагинацию в `getSupplyGoods`                                                                         | `src/infra/wbSuppliesClient.ts`                                                                                                                                                                                      |
 
 ## 12. Pipeline 4 — Sales forecast MVP
 
@@ -781,7 +804,7 @@ pnpm typecheck       # tsc --noEmit
    (по `regionName`: ключ `region_key`, тот же net-of-cancel accounting).
 2. `computeDemandSnapshot` считает **fulfillment** demand baseline в `wb_demand_snapshots`
    (спрос по складу исполнения).
-2b. `computeRegionDemandSnapshot` считает **региональный** спрос в **`wb_region_demand_snapshots`**
+   2b. `computeRegionDemandSnapshot` считает **региональный** спрос в **`wb_region_demand_snapshots`**
    (те же 7/30/90-дневные формулы; ключ `(region_key, nm_id, tech_size)`). Не подменяет шаг прогноза по складам.
 3. `buildForecastSnapshot` соединяет **только** fulfillment demand (`wb_demand_snapshots`) + pinned stock snapshot + incoming
    supplies и пишет `wb_forecast_snapshots`.

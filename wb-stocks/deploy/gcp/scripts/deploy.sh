@@ -43,6 +43,9 @@ cd "$WB_DIR"
 sudo -u wbstocks --preserve-env=PATH bash -c 'pnpm install --frozen-lockfile'
 sudo -u wbstocks --preserve-env=PATH bash -c 'pnpm build:forecast-ui-client'
 
+# Refresh /etc/wb-stocks.env in case Secret Manager values changed.
+sudo deploy/gcp/scripts/fetch-secrets.sh /etc/wb-stocks.env /srv/wb-stocks/data
+
 # Re-install systemd units in case they changed in this deploy.
 sudo install -m 0644 deploy/gcp/systemd/*.service /etc/systemd/system/
 sudo install -m 0644 deploy/gcp/systemd/*.timer   /etc/systemd/system/

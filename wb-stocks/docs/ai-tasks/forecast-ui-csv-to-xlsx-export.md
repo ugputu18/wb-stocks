@@ -21,17 +21,17 @@ shared string, …), а кодировка фиксирована UTF-8 внут
 
 Заменены **все три экспорт-роута** прогноза:
 
-| Endpoint                                         | Старое имя файла               | Новое имя файла                  |
-| ------------------------------------------------ | ------------------------------ | -------------------------------- |
-| `GET /api/forecast/export-wb`                    | `wb-replenishment-…csv`        | `wb-replenishment-…xlsx`         |
-| `GET /api/forecast/export-supplier`              | `supplier-replenishment-…csv`  | `supplier-replenishment-…xlsx`   |
-| `GET /api/forecast/export-regional-stocks`       | `regional-stocks-…csv`         | `regional-stocks-…xlsx`          |
+| Endpoint                                   | Старое имя файла              | Новое имя файла                |
+| ------------------------------------------ | ----------------------------- | ------------------------------ |
+| `GET /api/forecast/export-wb`              | `wb-replenishment-…csv`       | `wb-replenishment-…xlsx`       |
+| `GET /api/forecast/export-supplier`        | `supplier-replenishment-…csv` | `supplier-replenishment-…xlsx` |
+| `GET /api/forecast/export-regional-stocks` | `regional-stocks-…csv`        | `regional-stocks-…xlsx`        |
 
 UI-кнопки переименованы: «Скачать WB CSV» → «Скачать WB Excel»,
 «Скачать Supplier CSV» → «Скачать Supplier Excel», «Экспорт в CSV» → «Экспорт
 в Excel». Импорт остатков нашего склада (`POST /api/forecast/upload-own-stocks`)
-сознательно **остался на CSV** — оператор грузит выгрузку из 1С/склада в её
-родном формате, входной парсинг локалезависимым не страдает.
+изначально оставался на CSV, но затем был расширен до CSV/XLS/XLSX для
+выгрузок Sku Simple.
 
 ## Ключевые точки кода
 
@@ -55,6 +55,7 @@ UI-кнопки переименованы: «Скачать WB CSV» → «Ск
   парсинг `Content-Disposition` (включая `filename*=UTF-8''…`) сохранён.
 
 Удалены как мёртвый код:
+
 - `src/server/csv.ts`
 - `src/server/forecast-ui/http/sendCsvAttachment.ts`
 - `test/csv.test.ts`, `test/sendCsvAttachment.test.ts`

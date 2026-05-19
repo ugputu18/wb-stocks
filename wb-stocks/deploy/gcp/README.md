@@ -68,9 +68,23 @@ printf 'PUT-YOUR-WB-TOKEN-HERE' | gcloud secrets create WB_TOKEN \
 # Bearer token for the forecast UI server (defence in depth behind IAP).
 openssl rand -hex 32 | gcloud secrets create FORECAST_UI_TOKEN \
   --data-file=- --replication-policy=automatic
+
+# OptiCore / СкладОблако credentials for own warehouse stock refresh.
+printf 'PUT-YOUR-OPTICORE-USER-HERE' | gcloud secrets create OPTICORE_USER \
+  --data-file=- --replication-policy=automatic
+printf 'PUT-YOUR-OPTICORE-PASSWORD-HERE' | gcloud secrets create OPTICORE_PASSWORD \
+  --data-file=- --replication-policy=automatic
+
+# Required OptiCore endpoint. Use the customer-specific URL issued by OptiCore/CDEK.
+printf 'http://YOUR-OPTICORE-HOST:33333' | gcloud secrets create OPTICORE_BASE_URL \
+  --data-file=- --replication-policy=automatic
+# Optional override. Leave unset if stock type 0 is correct.
+printf '0' | gcloud secrets create OPTICORE_STOCK_TYPE_IDS \
+  --data-file=- --replication-policy=automatic
 ```
 
 To rotate later: `gcloud secrets versions add WB_TOKEN --data-file=-`.
+Same pattern applies to `OPTICORE_USER` / `OPTICORE_PASSWORD`.
 
 ## 4. Data disk
 

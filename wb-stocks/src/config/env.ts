@@ -11,6 +11,19 @@ const optionalNonEmptyString = z
     z.string().min(1).optional(),
   );
 
+const optionalBoolean = z.preprocess((value) => {
+  if (typeof value !== "string" || value.length === 0) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return value;
+}, z.boolean().optional());
+
+const optionalPositiveInt = z.preprocess(
+  (value) => (typeof value === "string" && value.length === 0 ? undefined : value),
+  z.coerce.number().int().positive().optional(),
+);
+
 /**
  * WB_TOKEN is only required for flows that actually talk to WB API
  * (i.e. the `import:stocks` CLI). The own-warehouse import doesn't need it,
@@ -40,6 +53,23 @@ const envSchema = z.object({
   FORECAST_UI_PORT: z.coerce.number().int().positive().default(3847),
   /** If set, JSON API requires `Authorization: Bearer <FORECAST_UI_TOKEN>`. */
   FORECAST_UI_TOKEN: optionalNonEmptyString,
+  /** OptiCore / СкладОблако SOAP API for own warehouse stock refresh. */
+  OPTICORE_STOCK_REFRESH_ENABLED: optionalBoolean.default(true),
+  OPTICORE_STOCK_FAILURE_MODE: z.enum(["warn", "fail"]).default("warn"),
+  OPTICORE_BASE_URL: optionalNonEmptyString,
+  OPTICORE_REPORTS_URL: optionalNonEmptyString,
+  OPTICORE_USER: optionalNonEmptyString,
+  OPTICORE_PASSWORD: optionalNonEmptyString,
+  OPTICORE_HTTP_USER: optionalNonEmptyString,
+  OPTICORE_HTTP_PASSWORD: optionalNonEmptyString,
+  OPTICORE_TIMEOUT_MS: optionalPositiveInt.default(30_000),
+  OPTICORE_OWN_WAREHOUSE_CODE: optionalNonEmptyString,
+  OPTICORE_WAREHOUSE_IDS: optionalNonEmptyString,
+  OPTICORE_STOCK_TYPE_IDS: optionalNonEmptyString.default("0"),
+  OPTICORE_VENDOR_CODE_SOURCE: z
+    .enum(["sku_id", "article", "code"])
+    .default("sku_id"),
+  OPTICORE_SKU_VENDOR_MAP_FILE: optionalNonEmptyString,
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

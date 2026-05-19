@@ -6,8 +6,10 @@ import type { WbOrdersDailyByRegionRepository } from "../infra/wbOrdersDailyByRe
 import type { WbDemandSnapshotRepository } from "../infra/wbDemandSnapshotRepository.js";
 import type { WbRegionDemandSnapshotRepository } from "../infra/wbRegionDemandSnapshotRepository.js";
 import type { StockSnapshotRepository } from "../infra/stockSnapshotRepository.js";
+import type { OwnStockSnapshotRepository } from "../infra/ownStockSnapshotRepository.js";
 import type { WbSupplyRepository } from "../infra/wbSupplyRepository.js";
 import type { WbForecastSnapshotRepository } from "../infra/wbForecastSnapshotRepository.js";
+import type { OpticoreReportsClient } from "../infra/opticoreReportsClient.js";
 import {
   importWbOrders,
   type ImportWbOrdersResult,
@@ -16,6 +18,11 @@ import {
   importWbStocks,
   type ImportWbStocksResult,
 } from "./importWbStocks.js";
+import {
+  importOpticoreStock,
+  type ImportOpticoreStockOptions,
+  type ImportOpticoreStockResult,
+} from "./importOpticoreStock.js";
 import {
   computeDemandSnapshot,
   type ComputeDemandSnapshotResult,
@@ -37,8 +44,12 @@ export interface RunSalesForecastMvpDeps {
   demandRepository: WbDemandSnapshotRepository;
   regionDemandRepository: WbRegionDemandSnapshotRepository;
   stockRepository: StockSnapshotRepository;
+  ownStockRepository?: OwnStockSnapshotRepository;
   supplyRepository: WbSupplyRepository;
   forecastRepository: WbForecastSnapshotRepository;
+  opticoreClient?: OpticoreReportsClient;
+  opticoreStockOptions?: Omit<ImportOpticoreStockOptions, "date">;
+  opticoreStockFailureMode?: "warn" | "fail";
   logger: Logger;
   now?: () => Date;
 }
@@ -61,6 +72,12 @@ export interface RunSalesForecastMvpOptions {
    * но будет лежать в БД.
    */
   refreshStocks?: boolean;
+  /**
+   * Подтягивать ли свежий остаток собственного склада из OptiCore.
+   * Шаг выполняется только когда OptiCore-клиент и репозиторий склада
+   * переданы в deps; иначе считается отключённым.
+   */
+  refreshOwnStock?: boolean;
 }
 
 export interface RunSalesForecastMvpResult {
@@ -73,6 +90,10 @@ export interface RunSalesForecastMvpResult {
   ordersWindowTo: string;
   /** `null`, если `refreshStocks=false`. */
   stockImport: ImportWbStocksResult | null;
+  /** `null`, если OptiCore не настроен или `refreshOwnStock=false`. */
+  ownStockImport: ImportOpticoreStockResult | null;
+  /** Заполняется при `opticoreStockFailureMode=warn`, чтобы общий апдейт не падал из-за склада. */
+  ownStockImportError: string | null;
   ordersImport: ImportWbOrdersResult;
   demandSnapshot: ComputeDemandSnapshotResult;
   regionDemandSnapshot: ComputeRegionDemandSnapshotResult;
@@ -89,6 +110,9 @@ const ORDERS_IMPORT_MAX_PAGES = 30;
  * End-to-end happy path used by the CLI и UI «Обновить данные WB»:
  * 0. (опц.) подтянуть свежий снэпшот остатков WB (`importWbStocks`),
  *    чтобы forecast мог пиниться от свежего `wb_stock_snapshots.snapshot_at`
+ * 0b. (опц.) подтянуть свежий снэпшот собственного склада из OptiCore
+ *     в `own_stock_snapshots`, чтобы supplier/складская витрина видела
+ *     актуальный `ownStock` сразу после общего обновления
  * 1. pull the exact orders window needed for the demand snapshot
  * 2. recompute the demand snapshot for `snapshotDate`
  * 3. recompute forecast slices for all requested horizons
@@ -100,6 +124,7 @@ const ORDERS_IMPORT_MAX_PAGES = 30;
  * on the **same** DB connection **after** all steps complete successfully.
  * That rolls back writes to:
  * - `wb_stock_snapshots` (новый append-only snapshot, созданный шагом 0)
+ * - `own_stock_snapshots` (OptiCore replace-by-date snapshot, созданный шагом 0b)
  * - `wb_orders_daily` / `wb_orders_daily_by_region` (order import replace-by-day)
  * - `wb_demand_snapshots` / `wb_region_demand_snapshots` (demand replace-by-date)
  * - `wb_forecast_snapshots` (forecast replace per horizon/scope)
@@ -121,8 +146,12 @@ export async function runSalesForecastMvp(
     demandRepository,
     regionDemandRepository,
     stockRepository,
+    ownStockRepository,
     supplyRepository,
     forecastRepository,
+    opticoreClient,
+    opticoreStockOptions,
+    opticoreStockFailureMode = "warn",
     logger,
   } = deps;
   const now = deps.now ?? (() => new Date());
@@ -134,6 +163,9 @@ export async function runSalesForecastMvp(
   const sku = normalizeOptionalArg(options.sku);
   const warehouse = normalizeOptionalArg(options.warehouse);
   const refreshStocks = options.refreshStocks !== false;
+  const refreshOwnStockRequested = options.refreshOwnStock !== false;
+  const refreshOwnStock =
+    refreshOwnStockRequested && opticoreClient !== undefined && ownStockRepository !== undefined;
   const ordersWindowFrom = addDays(snapshotDate, -DEMAND_LOOKBACK_DAYS);
   const ordersWindowTo = addDays(snapshotDate, -1);
 
@@ -145,6 +177,7 @@ export async function runSalesForecastMvp(
       sku,
       warehouse,
       refreshStocks,
+      refreshOwnStock,
       ordersWindowFrom,
       ordersWindowTo,
     },
@@ -176,6 +209,54 @@ export async function runSalesForecastMvp(
         },
         "WB sales forecast MVP: stocks refreshed",
       );
+    }
+
+    let ownStockImport: ImportOpticoreStockResult | null = null;
+    let ownStockImportError: string | null = null;
+    if (refreshOwnStockRequested && !refreshOwnStock) {
+      ownStockImportError =
+        "OptiCore stock refresh is not configured: set OPTICORE_REPORTS_URL (or OPTICORE_BASE_URL), OPTICORE_USER and OPTICORE_PASSWORD in the server environment.";
+      logger.warn(
+        {
+          hasOpticoreClient: opticoreClient !== undefined,
+          hasOwnStockRepository: ownStockRepository !== undefined,
+        },
+        "WB sales forecast MVP: OptiCore own stock refresh skipped",
+      );
+    }
+    if (refreshOwnStock && opticoreClient && ownStockRepository) {
+      try {
+        ownStockImport = await importOpticoreStock(
+          {
+            client: opticoreClient,
+            repository: ownStockRepository,
+            logger,
+            now,
+          },
+          {
+            ...opticoreStockOptions,
+            date: snapshotDate,
+          },
+        );
+        logger.info(
+          {
+            snapshotDate: ownStockImport.snapshotDate,
+            warehouseCode: ownStockImport.warehouseCode,
+            fetched: ownStockImport.fetched,
+            filteredOut: ownStockImport.filteredOut,
+            inserted: ownStockImport.inserted,
+            skipped: ownStockImport.skipped,
+          },
+          "WB sales forecast MVP: own warehouse stock refreshed from OptiCore",
+        );
+      } catch (err) {
+        ownStockImportError = err instanceof Error ? err.message : String(err);
+        logger.warn(
+          { err, failureMode: opticoreStockFailureMode },
+          "WB sales forecast MVP: OptiCore own stock refresh failed",
+        );
+        if (opticoreStockFailureMode === "fail") throw err;
+      }
     }
 
     const ordersImport = await importWbOrders(
@@ -298,6 +379,8 @@ export async function runSalesForecastMvp(
       ordersWindowFrom,
       ordersWindowTo,
       stockImport,
+      ownStockImport,
+      ownStockImportError,
       ordersImport: patchDryRunFlag(ordersImport, dryRun),
       demandSnapshot: patchDryRunFlag(demandSnapshot, dryRun),
       regionDemandSnapshot: patchDryRunFlag(regionDemandSnapshot, dryRun),

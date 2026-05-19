@@ -1,16 +1,17 @@
 import { EventEmitter } from "node:events";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
+import * as XLSX from "xlsx";
 import { openDatabase } from "../src/infra/db.js";
 import { OwnStockSnapshotRepository } from "../src/infra/ownStockSnapshotRepository.js";
 import { createUploadOwnStocksRoute } from "../src/server/forecast-ui/handlers/uploadOwnStocksRoute.js";
 import type { ForecastUiServerCtx } from "../src/server/forecast-ui/forecastUiServerCtx.js";
 
-function makeReq(method: string, body: string): IncomingMessage {
+function makeReq(method: string, body: string | Buffer): IncomingMessage {
   const req = new EventEmitter() as IncomingMessage;
   (req as { method: string }).method = method;
   queueMicrotask(() => {
-    req.emit("data", Buffer.from(body, "utf8"));
+    req.emit("data", Buffer.isBuffer(body) ? body : Buffer.from(body, "utf8"));
     req.emit("end");
   });
   return req;
@@ -89,7 +90,11 @@ describe("POST /api/forecast/upload-own-stocks", () => {
       warehouseCode: string;
       inserted: number;
       skipped: number;
-      detection: { vendorColumn: string; wbColumn: string; quantityColumn: string };
+      detection: {
+        vendorColumn: string;
+        wbColumn: string;
+        quantityColumn: string;
+      };
     };
     expect(body.ok).toBe(true);
     expect(body.snapshotDate).toBe("2026-05-12");
@@ -117,6 +122,46 @@ describe("POST /api/forecast/upload-own-stocks", () => {
     expect((captured.body as { ok: boolean }).ok).toBe(false);
   });
 
+  it("ingests Sku Simple XLS uploads and filters package duplicates", async () => {
+    const ctx = makeCtx();
+    const route = createUploadOwnStocksRoute(ctx);
+    const url = new URL(
+      "http://127.0.0.1/api/forecast/upload-own-stocks?date=2026-05-19&filename=sku-simple.xls",
+    );
+    const xls = makeWorkbookBuffer(
+      [
+        ["Артикул", "Название", "Единица измерения", "Остаток, шт"],
+        ["A", "Item A", "шт", "12 шт"],
+        ["A", "Item A", "кор", "2 кор"],
+        ["B", "Item B", "шт", "0 шт"],
+        ["B", "Item B", "кор", "0 шт"],
+      ],
+      "xls",
+    );
+
+    const { res, captured } = makeRes();
+    await route.handle(makeReq("POST", xls), res, url);
+
+    expect(captured.statusCode).toBe(200);
+    const body = captured.body as {
+      ok: boolean;
+      inserted: number;
+      filteredOut: number;
+      detection: { format: string; unitColumn: string | null };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.inserted).toBe(2);
+    expect(body.filteredOut).toBe(2);
+    expect(body.detection.format).toBe("spreadsheet");
+    expect(body.detection.unitColumn).toBe("Единица измерения");
+
+    const repo = new OwnStockSnapshotRepository(ctx.db);
+    const map = repo.quantitiesByVendor("2026-05-19", "main");
+    expect(map.get("A")).toBe(12);
+    expect(map.get("B")).toBe(0);
+    expect(map.size).toBe(2);
+  });
+
   it("returns 400 on malformed date param", async () => {
     const ctx = makeCtx();
     const route = createUploadOwnStocksRoute(ctx);
@@ -131,3 +176,13 @@ describe("POST /api/forecast/upload-own-stocks", () => {
     expect(body.error).toMatch(/YYYY-MM-DD/);
   });
 });
+
+function makeWorkbookBuffer(
+  rows: unknown[][],
+  bookType: "xls" | "xlsx",
+): Buffer {
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(workbook, sheet, "Sku");
+  return XLSX.write(workbook, { bookType, type: "buffer" }) as Buffer;
+}

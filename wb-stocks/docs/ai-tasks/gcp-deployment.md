@@ -44,10 +44,11 @@ Cloud Run, без замены `better-sqlite3`. Готово к запуску 
   `OnCalendar=*-*-* 04:00:00` (раз в день, после supplies).
 - [`deploy/gcp/scripts/fetch-secrets.sh`](../../deploy/gcp/scripts/fetch-secrets.sh)
   — пишет `/etc/wb-stocks.env` (0640 root:wbstocks) из Secret Manager
-  (`WB_TOKEN`, `FORECAST_UI_TOKEN`).
+  (`WB_TOKEN`, `FORECAST_UI_TOKEN`, `OPTICORE_*`).
 - [`deploy/gcp/scripts/deploy.sh`](../../deploy/gcp/scripts/deploy.sh) —
   обновление кода: `gcloud compute ssh --tunnel-through-iap`,
   `git pull`, `pnpm install --frozen-lockfile`, ребилд SPA,
+  обновление `/etc/wb-stocks.env` из Secret Manager,
   `systemctl restart forecast-ui.service`.
 
 ## Ключевые решения

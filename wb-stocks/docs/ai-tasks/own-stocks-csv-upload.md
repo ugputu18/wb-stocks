@@ -1,10 +1,9 @@
-# Own-warehouse stocks CSV upload from the forecast UI
+# Own-warehouse stocks CSV/XLS upload from the forecast UI
 
 Operators can now load "our warehouse" stock snapshots directly from the
 forecast UI main page, without dropping files into `store/our<MMDD>.csv` and
-running the CLI on the server. The new button sits next to **«Скачать WB CSV»**
-and **«Скачать Supplier CSV»** in `ActionsBar` and is labelled
-**«Загрузить остатки CSV»**.
+running the CLI on the server. The button sits next to the Excel export
+actions in `ActionsBar` and is labelled **«Загрузить остатки»**.
 
 ## What changed
 
@@ -13,6 +12,7 @@ and **«Скачать Supplier CSV»** in `ActionsBar` and is labelled
 `src/application/parseOwnStockCsv.ts` used to require the literal column
 names `"Артикул"` and `"Остаток"`. It now:
 
+- Auto-detects CSV vs Excel (`.xls`, `.xlsx`) via `parseOwnStockInput`.
 - Auto-detects the delimiter (`,`, `;`, or `\t`) from the first line.
 - Picks the stock column by header keyword: the first column whose name
   contains `остаток` (case- and Unicode-insensitive).
@@ -24,8 +24,11 @@ names `"Артикул"` and `"Остаток"`. It now:
 - The vendor article column is the preferred source of `vendorCode` for the
   DB. If a row's vendor cell is empty but its WB cell is non-empty, the WB
   ID (as a string) is used as `vendorCode` for that row, so we never silently
-  drop a row that has *some* identifier.
-- Returns a new `detection: { vendorColumn, wbColumn, quantityColumn, delimiter }`
+  drop a row that has _some_ identifier.
+- Filters duplicated Sku Simple package rows: rows whose stock cell contains
+  `кор`, or whose `Единица измерения` is not a piece unit, are counted as
+  `filteredOut` and not imported.
+- Returns a `detection: { vendorColumn, wbColumn, quantityColumn, unitColumn, delimiter, format, sheetName }`
   block so the UI can show exactly how the input was interpreted.
 
 All existing tests still pass because `"Артикул"` / `"Остаток"` both contain
@@ -38,6 +41,7 @@ Tests live in `test/parseOwnStockCsv.test.ts` and now cover:
 - Empty vendor cell → fallback to WB article as `vendorCode`.
 - WB-only header → WB column used as the key.
 - Semicolon delimiter + case-insensitive header match.
+- Sku Simple `.xls` rows where only the `шт` unit row is imported.
 - Missing `Остаток` / `Артикул` columns are reported as parse issues.
 
 ### Server route: `POST /api/forecast/upload-own-stocks`
@@ -50,7 +54,7 @@ POST /api/forecast/upload-own-stocks?date=YYYY-MM-DD&warehouse=<code>&filename=<
 Content-Type: text/csv; charset=utf-8
 Authorization: Bearer <FORECAST_UI_TOKEN>   # if configured
 
-<raw CSV bytes>
+<raw CSV/XLS/XLSX bytes>
 ```
 
 All query params are optional:
@@ -59,15 +63,16 @@ All query params are optional:
 - `warehouse` — warehouse code; defaults to `main`.
 - `filename` — informational, persisted into `source_file`.
 
-Response (200) is the unchanged `ImportOwnWarehouseStateResult` shape plus
-`ok: true`, `detection` and `issues`. Validation errors (bad date, empty
+Response (200) is the `ImportOwnWarehouseStateResult` shape plus `ok: true`,
+`detection`, `issues`, and `filteredOut`. Validation errors (bad date, empty
 body, no recognizable columns) return 400 with a Russian `error` message.
 
 Idempotency is unchanged: `OwnStockSnapshotRepository.replaceForDate` wipes
 and rewrites the `(snapshotDate, warehouseCode)` set in one transaction.
 
 Test: `test/uploadOwnStocksRoute.test.ts` covers the happy path with the
-demo CSV, an empty body, and a malformed `date` query param.
+demo CSV, a Sku Simple XLS upload, an empty body, and a malformed `date`
+query param.
 
 ### Client UI
 
@@ -76,14 +81,14 @@ demo CSV, an empty body, and a malformed `date` query param.
   `runUploadOwnStocks(file)` and a new `"upload-own-stocks"` value in the
   `ActionBusy` union.
 - `forecast-ui-client/src/components/ActionsBar.tsx` now renders a third
-  button **«Загрузить остатки CSV»** that opens a hidden
-  `<input type="file" accept=".csv,text/csv">`. After a successful upload
+  button **«Загрузить остатки»** that opens a hidden file input accepting
+  `.csv`, `.xls`, and `.xlsx`. After a successful upload
   the page reloads via the existing `reload(form, apiToken)` pipeline, so
   the new stocks show up in the forecast tables immediately.
 - The status line reports the inserted / skipped counts and the column
   names the server actually picked, e.g.:
 
-  > Остатки загружены: 4 строк (пропущено 0, создано за 2026-05-12;
+  > Остатки загружены: 4 строк (пропущено 0, отфильтровано 0, создано за 2026-05-12;
   > колонки: vendor=«Артикул продавца», WB=«Артикул WB»,
   > остаток=«Остаток склад Канпол рус»).
 
@@ -95,7 +100,7 @@ warehouse code from `form.ownWarehouseCode` (empty → server default `main`).
 1. Build the SPA: `pnpm build:forecast-ui-client`.
 2. Run the server: `pnpm serve:forecast-ui`.
 3. Open the main page, choose the desired «Дата среза» (and optionally
-   «Свой склад») in the filters form, click **«Загрузить остатки CSV»**, and
+   «Свой склад») in the filters form, click **«Загрузить остатки»**, and
    pick a CSV like:
 
    ```csv
@@ -106,7 +111,9 @@ warehouse code from `form.ownWarehouseCode` (empty → server default `main`).
    35/368_bei,507833580,459
    ```
 
-4. The status line shows the result; the page reloads automatically.
+4. Or pick a Sku Simple `.xls` export with `Артикул`, `Остаток, шт`, and
+   `Единица измерения`; only piece rows are imported.
+5. The status line shows the result; the page reloads automatically.
 
 The existing CLI flow (`pnpm import:own-stocks --file=…`) still works and
 shares the same parser, so files uploaded via the UI and files imported via

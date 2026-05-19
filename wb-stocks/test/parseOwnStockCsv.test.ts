@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { parseOwnStockCsv } from "../src/application/parseOwnStockCsv.js";
+import * as XLSX from "xlsx";
+import {
+  parseOwnStockCsv,
+  parseOwnStockInput,
+} from "../src/application/parseOwnStockCsv.js";
 
 describe("parseOwnStockCsv", () => {
   it("parses a minimal valid file with header and rows", () => {
@@ -34,12 +38,22 @@ describe("parseOwnStockCsv", () => {
   });
 
   it("normalizes '1 234' and '1,5' numeric formats", () => {
-    const csv = "Артикул,Остаток\nA,1 234\nB,\"1,5\"\n";
+    const csv = 'Артикул,Остаток\nA,1 234\nB,"1,5"\n';
     const { rows, issues } = parseOwnStockCsv(csv);
     expect(issues).toEqual([]);
     expect(rows).toEqual([
       { vendorCode: "A", quantity: 1234 },
       { vendorCode: "B", quantity: 1 },
+    ]);
+  });
+
+  it("normalizes stock values that include a piece unit suffix", () => {
+    const csv = "Артикул,Остаток\nA,1 234 шт\nB,5 шт.\n";
+    const { rows, issues } = parseOwnStockCsv(csv);
+    expect(issues).toEqual([]);
+    expect(rows).toEqual([
+      { vendorCode: "A", quantity: 1234 },
+      { vendorCode: "B", quantity: 5 },
     ]);
   });
 
@@ -143,6 +157,39 @@ describe("parseOwnStockCsv", () => {
     ]);
   });
 
+  it("parses Sku Simple XLS files and filters duplicated box rows", () => {
+    const xls = makeWorkbookBuffer(
+      [
+        ["Артикул", "Название", "Единица измерения", "Остаток, шт"],
+        ["22/580_bei_new", "Пустышка", "шт", "1938 шт"],
+        ["22/580_bei_new", "Пустышка", "кор", "323 кор"],
+        ["22/651_pin", "Пустышка 2 шт.", "шт", "2219 шт"],
+        ["22/651_pin", "Пустышка 2 шт.", "кор", "221 кор и 9 шт"],
+        ["1/653", "Вкладыши", "шт", "0 шт"],
+        ["1/653", "Вкладыши", "кор", "0 шт"],
+        ["unknown", "Неопознанный товар", "паллет", "0 шт"],
+      ],
+      "xls",
+    );
+
+    const { rows, issues, filteredOut, detection } = parseOwnStockInput(
+      xls,
+      "sc_xls_20260519072632_157_Sku_Simple.xls",
+    );
+
+    expect(issues).toEqual([]);
+    expect(filteredOut).toBe(4);
+    expect(detection.format).toBe("spreadsheet");
+    expect(detection.vendorColumn).toBe("Артикул");
+    expect(detection.quantityColumn).toBe("Остаток, шт");
+    expect(detection.unitColumn).toBe("Единица измерения");
+    expect(rows).toEqual([
+      { vendorCode: "22/580_bei_new", quantity: 1938 },
+      { vendorCode: "22/651_pin", quantity: 2219 },
+      { vendorCode: "1/653", quantity: 0 },
+    ]);
+  });
+
   it("reports a clear issue when no Остаток column is present", () => {
     const csv = "Артикул,Цена\nA,100\n";
     const { rows, issues, detection } = parseOwnStockCsv(csv);
@@ -162,3 +209,13 @@ describe("parseOwnStockCsv", () => {
     expect(issues[0]!.reason).toMatch(/Артикул/);
   });
 });
+
+function makeWorkbookBuffer(
+  rows: unknown[][],
+  bookType: "xls" | "xlsx",
+): Buffer {
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(workbook, sheet, "Sku");
+  return XLSX.write(workbook, { bookType, type: "buffer" }) as Buffer;
+}

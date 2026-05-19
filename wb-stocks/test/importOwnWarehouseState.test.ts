@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import * as XLSX from "xlsx";
 import { openDatabase } from "../src/infra/db.js";
 import { OwnStockSnapshotRepository } from "../src/infra/ownStockSnapshotRepository.js";
 import { importOwnWarehouseState } from "../src/application/importOwnWarehouseState.js";
@@ -20,6 +21,14 @@ function fakeReader(byPath: Record<string, string>) {
     const hit = byPath[path];
     if (hit === undefined) throw new Error(`ENOENT: no such file "${path}"`);
     return Buffer.from(hit);
+  });
+}
+
+function fakeBufferReader(byPath: Record<string, Buffer>) {
+  return vi.fn(async (path: string) => {
+    const hit = byPath[path];
+    if (hit === undefined) throw new Error(`ENOENT: no such file "${path}"`);
+    return hit;
   });
 }
 
@@ -85,6 +94,36 @@ describe("importOwnWarehouseState", () => {
 
     expect(result.sourceFile).toBe("/tmp/custom.csv");
     expect(result.inserted).toBe(1);
+  });
+
+  it("imports Sku Simple XLS files while ignoring duplicated box rows", async () => {
+    const path = require("node:path").resolve("/tmp/sku-simple.xls");
+    const readFile = fakeBufferReader({
+      [path]: makeWorkbookBuffer(
+        [
+          ["Артикул", "Название", "Единица измерения", "Остаток, шт"],
+          ["A", "Item A", "шт", "12 шт"],
+          ["A", "Item A", "кор", "2 кор"],
+          ["B", "Item B", "шт", "0 шт"],
+          ["B", "Item B", "кор", "0 шт"],
+        ],
+        "xls",
+      ),
+    });
+
+    const result = await importOwnWarehouseState(
+      { repository: repo, logger: silentLogger(), readFile },
+      { date: "2026-05-19", file: "/tmp/sku-simple.xls" },
+    );
+
+    expect(result.inserted).toBe(2);
+    expect(result.filteredOut).toBe(2);
+    expect(result.fetched).toBe(4);
+    expect(result.detection.format).toBe("spreadsheet");
+    const map = repo.quantitiesByVendor("2026-05-19", "main");
+    expect(map.get("A")).toBe(12);
+    expect(map.get("B")).toBe(0);
+    expect(map.size).toBe(2);
   });
 
   it("reports wasUpdate=true when re-importing for the same date", async () => {
@@ -156,3 +195,13 @@ describe("importOwnWarehouseState", () => {
     ).rejects.toThrow(/ENOENT/);
   });
 });
+
+function makeWorkbookBuffer(
+  rows: unknown[][],
+  bookType: "xls" | "xlsx",
+): Buffer {
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(workbook, sheet, "Sku");
+  return XLSX.write(workbook, { bookType, type: "buffer" }) as Buffer;
+}

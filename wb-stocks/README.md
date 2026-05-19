@@ -55,6 +55,12 @@ pnpm import:stocks
 pnpm import:own-stocks                  # today, default warehouse
 pnpm import:own-stocks --date=2026-04-18
 
+# OptiCore / СкладОблако own warehouse stock:
+# when OPTICORE_REPORTS_URL (or OPTICORE_BASE_URL) and OPTICORE_USER/PASSWORD
+# are set, `pnpm forecast:sales-mvp` and
+# the forecast UI ↻ button refresh `own_stock_snapshots` automatically.
+pnpm export:opticore-stock --out=../store/opticore-stock.csv
+
 # WB supplies (поставки) — last 30 days by default:
 pnpm update:wb-supplies
 pnpm update:wb-supplies --from=2026-04-01 --status=4,5,6

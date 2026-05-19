@@ -60,8 +60,8 @@ export function ForecastSystemNav({
             type="button"
             class={cx(helpTrigger(), "system-nav-recalculate")}
             disabled={recalculateBusy || recalculateDisabled}
-            title="Пересчитать прогноз и обновить данные"
-            aria-label="Пересчитать прогноз и обновить данные"
+            title="Пересчитать прогноз, обновить WB и склад"
+            aria-label="Пересчитать прогноз, обновить WB и склад"
             onClick={() => void onRecalculate()}
           >
             {recalculateBusy ? "…" : "↻"}

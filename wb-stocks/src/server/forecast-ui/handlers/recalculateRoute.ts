@@ -63,6 +63,8 @@ export function createRecalculateRoute(ctx: ForecastUiServerCtx): ForecastRouteM
           : undefined;
       const refreshStocks =
         typeof body.refreshStocks === "boolean" ? body.refreshStocks : true;
+      const refreshOwnStock =
+        typeof body.refreshOwnStock === "boolean" ? body.refreshOwnStock : true;
 
       const result = await runSalesForecastMvp(buildMvpDeps(ctx), {
         snapshotDate,
@@ -71,6 +73,7 @@ export function createRecalculateRoute(ctx: ForecastUiServerCtx): ForecastRouteM
         sku,
         warehouse,
         refreshStocks,
+        refreshOwnStock,
       });
 
       json(res, 200, {

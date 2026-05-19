@@ -1,7 +1,7 @@
 import type { ForecastViewMode } from "../api/types.js";
 import type { ExplainFocus } from "../types/explain.js";
 import { tableEmptyState } from "../../styled-system/recipes";
-import { TableHeadHintCell } from "./hints/index.js";
+import { DemandPerDayHeader, TableHeadHintCell } from "./hints/index.js";
 import {
   badgeClass,
   formatInt,
@@ -76,7 +76,9 @@ function TheadWbTotal() {
         <th scope="col">Own</th>
         <th scope="col">System</th>
         <th scope="col">Дн. WB</th>
-        <th scope="col">Спрос/день Σ</th>
+        <th scope="col">
+          <DemandPerDayHeader aggregate />
+        </th>
         <th scope="col">На WB</th>
         <th scope="col">У пр-ля</th>
         <th scope="col">OOS (WB)</th>
@@ -119,7 +121,9 @@ function TheadWarehouses() {
         <th>nm_id</th>
         <th>vendor</th>
         <th>Дней запаса</th>
-        <th>Спрос/день</th>
+        <th>
+          <DemandPerDayHeader />
+        </th>
         <th>System</th>
         <th>WB ∑</th>
         <th>WB лок.</th>
@@ -165,7 +169,9 @@ function TheadSystemTotal() {
         <th scope="col">В пути</th>
         <th scope="col">Own</th>
         <th scope="col">System</th>
-        <th scope="col">Спрос/день Σ</th>
+        <th scope="col">
+          <DemandPerDayHeader aggregate />
+        </th>
         <th scope="col">Дн. system</th>
         <th scope="col">OOS (system)</th>
         <th scope="col">На WB</th>

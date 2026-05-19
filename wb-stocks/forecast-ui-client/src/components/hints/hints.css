@@ -65,3 +65,10 @@ p.action-hint.muted {
   font-weight: 400;
   opacity: 0.88;
 }
+
+.th-label-with-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.12rem;
+  white-space: nowrap;
+}

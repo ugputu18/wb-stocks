@@ -28,7 +28,11 @@ import {
   riskLabelWbTotal,
 } from "../utils/forecastFormat.js";
 import { HelpToggle } from "../components/HelpToggle.js";
-import { LabelWithInlineHelp } from "../components/hints/index.js";
+import {
+  DemandPerDayHeader,
+  LabelWithInlineHelp,
+  REGIONAL_STOCKS_DEMAND_PER_DAY_HELP,
+} from "../components/hints/index.js";
 
 type RiskFilter = "all" | "lt7" | "lt14" | "lt30" | "lt45" | "lt60";
 type TargetCoverage = "14" | "30" | "42" | "60";
@@ -611,7 +615,9 @@ export function RegionalStocksPage(): JSX.Element {
                     <th>nm_id</th>
                     <th>Размер</th>
                     <th title={activeAvailabilityTitle}>Доступно</th>
-                    <th>Спрос/день</th>
+                    <th>
+                      <DemandPerDayHeader help={REGIONAL_STOCKS_DEMAND_PER_DAY_HELP} />
+                    </th>
                     <th>Дней запаса</th>
                     <th>OOS</th>
                     <th title={`Сколько единиц не хватает в контуре «${activeScopeLabel}», чтобы закрыть целевое покрытие`}>

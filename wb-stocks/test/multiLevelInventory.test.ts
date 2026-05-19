@@ -8,6 +8,7 @@ import {
   daysOfStockWbFromNetworkTotals,
   systemStockoutDateEstimateFromSnapshot,
 } from "../src/domain/multiLevelInventory.js";
+import { roundUpToBoxUnits } from "../src/domain/productQuant.js";
 
 describe("buildInventoryLevels", () => {
   it("system risk when nothing anywhere", () => {
@@ -81,6 +82,12 @@ describe("buildSupplierSkuReplenishment", () => {
     expect(s.targetDemandSystem).toBe(600);
     expect(s.recommendedFromSupplier).toBe(500);
   });
+
+  it("rounds supplier shortfall up to full boxes", () => {
+    const s = buildSupplierSkuReplenishment(20, 100, 0, 30, 12);
+    expect(s.recommendedFromSupplier).toBe(504);
+    expect(s.unitsPerBox).toBe(12);
+  });
 });
 
 describe("buildSupplierOrderPlan", () => {
@@ -97,6 +104,19 @@ describe("buildSupplierOrderPlan", () => {
     expect(p.recommendedOrderQty).toBe(250);
     expect(p.willStockoutBeforeArrival).toBe(false);
     expect(p.daysUntilStockout).toBe(10);
+  });
+
+  it("rounds LT order up to full boxes", () => {
+    const p = buildSupplierOrderPlan({
+      systemDailyDemand: 10,
+      wbAvailableTotal: 100,
+      ownStock: 0,
+      leadTimeDays: 5,
+      coverageDays: 30,
+      safetyDays: 0,
+      unitsPerBox: 24,
+    });
+    expect(p.recommendedOrderQty).toBe(264);
   });
 
   it("flags stockout before arrival when projected stock negative", () => {
@@ -143,5 +163,18 @@ describe("buildSupplierOrderPlan", () => {
       coverageDays: 30,
     });
     expect(p.daysUntilStockout).toBe(null);
+  });
+});
+
+describe("roundUpToBoxUnits", () => {
+  it("rounds positive quantities to the next full box", () => {
+    expect(roundUpToBoxUnits(7, 6)).toBe(12);
+    expect(roundUpToBoxUnits(12, 6)).toBe(12);
+    expect(roundUpToBoxUnits(0, 6)).toBe(0);
+  });
+
+  it("treats missing or invalid quant as 1", () => {
+    expect(roundUpToBoxUnits(7, 0)).toBe(7);
+    expect(roundUpToBoxUnits(7, Number.NaN)).toBe(7);
   });
 });

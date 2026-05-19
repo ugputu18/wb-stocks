@@ -10,6 +10,7 @@
   "scripts": {
     "import:stocks": "node --env-file=.env --import tsx src/cli/importStocks.ts",
     "import:own-stocks": "node --env-file=.env --import tsx scripts/import-own-warehouse-state.ts",
+    "import:product-quants": "node --env-file=.env --import tsx scripts/import-product-quants.ts",
     "update:wb-supplies": "node --env-file=.env --import tsx scripts/update-wb-supplies.ts",
     "update:wb-tariffs": "node --env-file=.env --import tsx scripts/update-wb-tariffs.ts",
     "export:opticore-stock": "node --env-file=.env --import tsx scripts/export-opticore-stock.ts",

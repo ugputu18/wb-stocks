@@ -4,6 +4,10 @@ import {
   systemStockoutDateEstimateFromSnapshot,
 } from "../domain/multiLevelInventory.js";
 import {
+  roundRegionalShipmentToBoxes,
+  unitsPerBoxForVendor,
+} from "../domain/productQuant.js";
+import {
   getMacroRegionByRegionKey,
 } from "../domain/wbRegionMacroRegion.js";
 import {
@@ -51,6 +55,8 @@ export interface RegionalStocksReportRow {
   daysOfStockRegional: number;
   stockoutDateEstimate: string | null;
   recommendedToRegion: number;
+  /** Кол-во единиц товара в коробе. `1` означает "нет округления". */
+  unitsPerBox: number;
   /**
    * Quantity at our own (default "main") warehouse, looked up by `vendorCode`
    * from the latest own-stock snapshot. `0` if the SKU is missing from the
@@ -60,12 +66,9 @@ export interface RegionalStocksReportRow {
   /**
    * Suggested ship-to-WB quantity for this SKU under the regional plan.
    *
-   * Defined as `min(recommendedToRegion, ownWarehouseStock)` per product
-   * decision: мы не можем отгрузить в регион больше, чем лежит у нас на
-   * собственном складе, и одновременно не хотим отгружать больше, чем
-   * реально нужно региону (`recommendedToRegion`). Минимум — это то
-   * количество, которое одновременно «закрывает» регион и реально доступно
-   * к отгрузке прямо сейчас.
+   * Defined as full boxes only:
+   * `min(ceil(recommendedToRegion / unitsPerBox),
+   * floor(ownWarehouseStock / unitsPerBox)) * unitsPerBox`.
    */
   recommendedOrderQty: number;
   stockSnapshotAtMin: string | null;
@@ -112,6 +115,8 @@ export interface BuildRegionalStocksReportInput {
    * Defaults to an empty map (i.e. ownWarehouseStock is 0 everywhere).
    */
   ownStockByVendor?: ReadonlyMap<string, number>;
+  /** vendorCode → units per box. Missing or invalid values are treated as 1. */
+  unitsPerBoxByVendor?: ReadonlyMap<string, number>;
   /**
    * Identifier of the own warehouse that {@link ownStockByVendor} was
    * loaded for. Echoed into the report so that consumers (UI, CSV) can
@@ -287,6 +292,10 @@ export function buildRegionalStocksReport(
       vendorCode,
       input.ownStockByVendor,
     );
+    const unitsPerBox = unitsPerBoxForVendor(
+      vendorCode,
+      input.unitsPerBoxByVendor,
+    );
     const wbAvailable = regionalStartStock + regionalIncomingUnits;
     const regionalAvailable =
       stockScope === "wbWithOwn" ? wbAvailable + ownWarehouseStock : wbAvailable;
@@ -304,7 +313,11 @@ export function buildRegionalStocksReport(
     const risk = riskBucketFromDaysOfStock(
       Math.min(999_999, Math.floor(daysOfStockRegional)),
     );
-    const recommendedOrderQty = Math.min(recommendedToRegion, ownWarehouseStock);
+    const recommendedOrderQty = roundRegionalShipmentToBoxes(
+      recommendedToRegion,
+      ownWarehouseStock,
+      unitsPerBox,
+    );
     allRows.push({
       nmId,
       techSize,
@@ -321,6 +334,7 @@ export function buildRegionalStocksReport(
         regionalForecastDailyDemand,
       ),
       recommendedToRegion,
+      unitsPerBox,
       ownWarehouseStock,
       recommendedOrderQty,
       stockSnapshotAtMin: s?.stockSnapshotAtMin ?? null,

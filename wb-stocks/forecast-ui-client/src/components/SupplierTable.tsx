@@ -116,6 +116,7 @@ export function SupplierTable({
         >
           <strong>{formatInt(r.recommendedFromSupplier)}</strong>
         </td>
+        <td>{formatInt(r.unitsPerBox)}</td>
         <td>{formatNum(r.stockAtArrival)}</td>
         <td>
           <strong>{formatInt(r.recommendedOrderQty)}</strong>
@@ -190,6 +191,7 @@ export function SupplierTable({
                 <th>Own</th>
                 <th>System</th>
                 <th>Заказать</th>
+                <th>Квант</th>
                 <th>Запас к приходу</th>
                 <th>Заказ (LT)</th>
                 <th>Риск до прихода</th>
@@ -207,6 +209,7 @@ export function SupplierTable({
                 <TableHeadHintCell>наш склад</TableHeadHintCell>
                 <TableHeadHintCell>WB∑ + own</TableHeadHintCell>
                 <TableHeadHintCell>простая рекомендация</TableHeadHintCell>
+                <TableHeadHintCell>единиц в коробе</TableHeadHintCell>
                 <TableHeadHintCell>ожидаемый запас к приходу LT</TableHeadHintCell>
                 <TableHeadHintCell>план с LT и покрытием</TableHeadHintCell>
                 <TableHeadHintCell>не хватит при приходе</TableHeadHintCell>

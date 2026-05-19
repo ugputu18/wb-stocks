@@ -8,9 +8,14 @@ import {
   loadRegionalStocksReport,
   resolveLatestForecastSnapshotDate,
 } from "../queries/loadRegionalStocksReport.js";
+import { loadRedistributionReport } from "../queries/loadRedistributionReport.js";
 import {
   forecastSupplierXlsxFilename,
   forecastWbXlsxFilename,
+  REDISTRIBUTION_FULFILLMENT_EXPORT_COLUMNS,
+  REDISTRIBUTION_REGIONAL_EXPORT_COLUMNS,
+  redistributionRowsToExportObjects,
+  redistributionXlsxFilename,
   REGIONAL_STOCKS_EXPORT_COLUMNS,
   regionalStocksXlsxFilename,
   regionalStocksRowsToExportObjects,
@@ -25,6 +30,7 @@ import {
 } from "../export/forecastExportMappers.js";
 import type { ForecastUiHandlerDeps } from "../types.js";
 import type { ForecastRouteMatch } from "../routes/routeTypes.js";
+import { parseRedistributionExportQuery } from "../parse/exportQuery.js";
 
 function resolveForecastSnapshotDate(
   deps: ForecastUiHandlerDeps,
@@ -232,6 +238,90 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
             outcome.report.horizonDays,
             outcome.report.macroRegion,
             outcome.report.stockScope,
+          ),
+          buffer,
+        );
+      },
+    },
+    {
+      match: (req, url) =>
+        req.method === "GET" &&
+        url.pathname === "/api/forecast/export-redistribution",
+      handle: async (req, res, url) => {
+        void req;
+        const q = parseQuery(url);
+        const resolved = resolveForecastSnapshotDate(
+          deps,
+          q.snapshotDate,
+          q.horizonDays,
+        );
+        if (!resolved.ok) {
+          json(res, resolved.status, { ok: false, error: resolved.error });
+          return;
+        }
+
+        const redistQ = parseRedistributionExportQuery(
+          url,
+          q.replenishmentTargetCoverageDays,
+        );
+        if (!redistQ.ok) {
+          json(res, 400, { ok: false, error: redistQ.error });
+          return;
+        }
+
+        const filter: ForecastReportFilter = {
+          warehouseKey: null,
+          q: null,
+          techSize: null,
+          riskStockout: q.riskStockout,
+          replenishmentTargetCoverageDays: q.replenishmentTargetCoverageDays,
+          replenishmentMode: q.replenishmentMode,
+          ownWarehouseCode: q.ownWarehouseCode,
+          supplierLeadTimeDays: q.supplierLeadTimeDays,
+          supplierOrderCoverageDays: q.supplierOrderCoverageDays,
+          supplierSafetyDays: q.supplierSafetyDays,
+          viewMode: "wbWarehouses",
+          systemTotalQuickFilter: q.systemTotalQuickFilter,
+        };
+
+        const outcome = loadRedistributionReport(
+          { db: deps.db, forecastReportQuery },
+          {
+            ...redistQ.query,
+            snapshotDate: resolved.snapshotDate,
+            horizonDays: q.horizonDays,
+            baseFilter: filter,
+          },
+        );
+        if (!outcome.ok) {
+          json(res, outcome.status, { ok: false, error: outcome.error });
+          return;
+        }
+
+        const columns =
+          outcome.report.rankingMode === "regional"
+            ? [...REDISTRIBUTION_REGIONAL_EXPORT_COLUMNS]
+            : [...REDISTRIBUTION_FULFILLMENT_EXPORT_COLUMNS];
+        const buffer = await toXlsxBuffer(
+          redistributionRowsToExportObjects(
+            outcome.report.rows,
+            outcome.report.rankingMode,
+          ),
+          columns,
+          {
+            sheetName:
+              outcome.report.rankingMode === "regional"
+                ? "Redistribution regional"
+                : "Redistribution fulfillment",
+          },
+        );
+        sendXlsxAttachment(
+          res,
+          redistributionXlsxFilename(
+            outcome.report.snapshotDate,
+            outcome.report.horizonDays,
+            outcome.report.donorWarehouseKey,
+            outcome.report.rankingMode,
           ),
           buffer,
         );

@@ -94,8 +94,8 @@ export function SupplierOrderExplain({ row: s }: { row: Record<string, unknown> 
       <p class="explain-formula">
         consumptionDuringLeadTime = systemDailyDemand × leadTimeDays; stockAtArrival =
         systemAvailableNow − consumptionDuringLeadTime; requiredAfterArrival = systemDailyDemand ×
-        (coverageDays + safetyDays); recommendedOrderQty = max(0, ceil(requiredAfterArrival −
-        stockAtArrival))
+        (coverageDays + safetyDays); recommendedOrderQty = roundUpToBox(max(0,
+        requiredAfterArrival − stockAtArrival), unitsPerBox)
       </p>
       <dl class="explain-inputs">
         <dt>Входы</dt>
@@ -108,7 +108,8 @@ export function SupplierOrderExplain({ row: s }: { row: Record<string, unknown> 
               (сток {formatInt(wbStock)} + в пути {formatInt(wbInc)}){" "}
             </>
           ) : null}
-          · ownStock {formatInt(own)} · systemAvailableNow {formatInt(sysNow)}
+          · ownStock {formatInt(own)} · systemAvailableNow {formatInt(sysNow)} · квант{" "}
+          {formatInt(s.unitsPerBox)}
         </dd>
       </dl>
       <ol class="explain-steps">

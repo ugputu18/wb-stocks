@@ -16,6 +16,7 @@ import { SUPPLY_STATUS_INCOMING_FOR_FORECAST } from "../../../domain/wbSupplySta
 import type { DbHandle } from "../../../infra/db.js";
 import type { Logger } from "../../../logger.js";
 import { OwnStockSnapshotRepository } from "../../../infra/ownStockSnapshotRepository.js";
+import { ProductQuantRepository } from "../../../infra/productQuantRepository.js";
 import { WbRegionMacroRegionRepository } from "../../../infra/wbRegionMacroRegionRepository.js";
 import { WbSupplyRepository } from "../../../infra/wbSupplyRepository.js";
 import type { RegionalStocksQuery } from "../parse/forecastQuery.js";
@@ -222,6 +223,7 @@ export function loadRegionalStocksReport(
   const ownStockByVendor = new OwnStockSnapshotRepository(
     deps.db,
   ).quantitiesByVendorLatest(q.ownWarehouseCode);
+  const unitsPerBoxByVendor = new ProductQuantRepository(deps.db).allByVendor();
 
   const report = buildRegionalStocksReport({
     snapshotDate,
@@ -236,6 +238,7 @@ export function loadRegionalStocksReport(
     demandRows,
     regionMacroLookup: buildRegionMacroLookup(macroRepo.getAll()),
     ownStockByVendor,
+    unitsPerBoxByVendor,
     ownWarehouseCode: q.ownWarehouseCode,
   });
   return { ok: true, report };

@@ -499,6 +499,9 @@ export function ManufacturerOrderPage(): JSX.Element {
                     <th>Own</th>
                     <th>System</th>
                     <th title="System сейчас − спрос за lead time">К приходу</th>
+                    <th title="Единиц товара в коробе. Если справочник не заполнен — 1.">
+                      Квант
+                    </th>
                     <th title="Плановый заказ с учётом LT, покрытия и страхового буфера">
                       Заказ (LT)
                     </th>
@@ -532,6 +535,7 @@ export function ManufacturerOrderPage(): JSX.Element {
                       <td class={r.stockAtArrival < 0 ? "manufacturer-order-negative-cell" : undefined}>
                         {formatNum(r.stockAtArrival)}
                       </td>
+                      <td>{formatInt(r.unitsPerBox)}</td>
                       <td class={r.recommendedOrderQty > 0 ? "manufacturer-order-qty-cell" : undefined}>
                         {formatInt(r.recommendedOrderQty)}
                       </td>

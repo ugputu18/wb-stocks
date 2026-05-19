@@ -4,15 +4,13 @@
  */
 
 import { normalizeWarehouseName } from "../../../src/domain/warehouseName.js";
+import {
+  parseWbWarehouseRow,
+  type WbWarehouseMetrics,
+} from "../../../src/application/redistribution/redistributionModel.js";
 
-export interface WbWarehouseMetrics {
-  warehouseKey: string;
-  warehouseNameRaw: string;
-  localAvailable: number;
-  forecastDailyDemand: number;
-  daysOfStock: number;
-  recommendedToWB: number;
-}
+export { parseWbWarehouseRow };
+export type { WbWarehouseMetrics };
 
 export interface WbRedistributionDonor {
   donorWarehouseKey: string;
@@ -39,41 +37,6 @@ export interface WbRedistributionResult {
   targets: WbRedistributionTarget[];
   /** Склады-получатели с recommendedToWB <= 0 — не попадают в targets; см. MVP. */
   skippedNonNeedyCount: number;
-}
-
-function num(x: unknown, fallback = 0): number {
-  const n = typeof x === "number" ? x : Number(x);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-/** Разбор одной строки ответа `GET /api/forecast/rows` при `viewMode=wbWarehouses`. */
-export function parseWbWarehouseRow(raw: unknown): WbWarehouseMetrics | null {
-  const row = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
-  if (!row) return null;
-  const wk = row.warehouseKey;
-  if (typeof wk !== "string") return null;
-  const warehouseKeyNorm = normalizeWarehouseName(wk);
-  if (!warehouseKeyNorm) return null;
-  const inv = row.inventoryLevels;
-  const local =
-    inv && typeof inv === "object"
-      ? num((inv as Record<string, unknown>).localAvailable, NaN)
-      : NaN;
-  if (!Number.isFinite(local)) return null;
-  const rep = row.replenishment;
-  const recWb =
-    rep && typeof rep === "object"
-      ? num((rep as Record<string, unknown>).recommendedToWB, 0)
-      : 0;
-  const nameRaw = row.warehouseNameRaw;
-  return {
-    warehouseKey: warehouseKeyNorm,
-    warehouseNameRaw: typeof nameRaw === "string" ? nameRaw : wk,
-    localAvailable: local,
-    forecastDailyDemand: num(row.forecastDailyDemand, 0),
-    daysOfStock: num(row.daysOfStock, 0),
-    recommendedToWB: Number.isFinite(recWb) ? Math.max(0, recWb) : 0,
-  };
 }
 
 export function computeWbRedistribution(

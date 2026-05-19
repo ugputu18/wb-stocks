@@ -22,22 +22,47 @@ export type RedistributionResultsSectionProps = {
   rankingMode: RankingMode;
   skuNetworkSelection: SkuNetworkSelection | null;
   openSkuRow: (r: RedistributionRow) => void;
+  exporting: boolean;
+  exportDisabled: boolean;
+  onExport: () => Promise<void>;
 };
 
 export function RedistributionResultsSection(props: RedistributionResultsSectionProps): JSX.Element {
-  const { loading, error, resultNote, meta, results, rankingMode, skuNetworkSelection, openSkuRow } =
-    props;
+  const {
+    loading,
+    error,
+    resultNote,
+    meta,
+    results,
+    rankingMode,
+    skuNetworkSelection,
+    openSkuRow,
+    exporting,
+    exportDisabled,
+    onExport,
+  } = props;
 
   return (
     <>
       {results.length > 0 ? (
         <Panel>
-          <SectionHeading as="h2" class={sectionHeadingRow()}>
-            <span>
-              Рекомендации (regional: дефицит → дни в регионе → спрос){" "}
-            </span>
-            <RedistributionRankingPill rankingMode={rankingMode} />
-          </SectionHeading>
+          <div class="redistribution-results-head">
+            <SectionHeading as="h2" class={sectionHeadingRow()}>
+              <span>
+                Рекомендации (regional: дефицит → дни в регионе → спрос){" "}
+              </span>
+              <RedistributionRankingPill rankingMode={rankingMode} />
+            </SectionHeading>
+            <button
+              type="button"
+              class="btn-load"
+              disabled={exportDisabled}
+              onClick={() => void onExport()}
+              title="Экспортировать рекомендации в Excel (XLSX)"
+            >
+              {exporting ? "Экспорт…" : "Экспорт в Excel"}
+            </button>
+          </div>
           <p class={cn(resultsLede())}>
             {rankingMode === "fulfillment" ? (
               <>

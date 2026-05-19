@@ -1,5 +1,6 @@
 import type { JSX } from "preact";
 import { useCallback, useMemo, useState } from "preact/hooks";
+import { downloadForecastFile } from "../api/client.js";
 import { ForecastSystemNav } from "../components/ForecastSystemNav.js";
 import {
   defaultFormState,
@@ -30,6 +31,10 @@ function initForm(): ForecastUrlFormState {
   return formStateFromSearchParams(new URLSearchParams(window.location.search));
 }
 
+function safeFilenamePart(raw: string): string {
+  return raw.trim().replace(/[\\/:*?"<>|\s]+/g, "_") || "donor";
+}
+
 export function RedistributionPage(): JSX.Element {
   const [form, setForm] = useState<ForecastUrlFormState>(initForm);
   const [donorKey, setDonorKey] = useState("");
@@ -37,6 +42,8 @@ export function RedistributionPage(): JSX.Element {
   const [minTransferableStr, setMinTransferableStr] = useState("1");
   const [maxSkuNetworksStr, setMaxSkuNetworksStr] = useState("100");
   const [rankingMode, setRankingMode] = useState(readRankingModeFromUrl);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const reserveDays = Number(reserveDaysStr);
   const minTransferable = Number(minTransferableStr);
@@ -115,6 +122,57 @@ export function RedistributionPage(): JSX.Element {
   const patch = (p: Partial<ForecastUrlFormState>) => {
     setForm((f) => ({ ...f, ...p }));
   };
+
+  const exportXlsx = useCallback(async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const params = new URLSearchParams({
+        horizonDays: form.horizonDays,
+        riskStockout: form.riskStockout,
+        targetCoverageDays: form.targetCoverageDays,
+        replenishmentMode: form.replenishmentMode,
+        leadTimeDays: form.leadTimeDays,
+        coverageDays: form.coverageDays,
+        safetyDays: form.safetyDays,
+        viewMode: "wbWarehouses",
+        donorWarehouseKey: donorKey.trim(),
+        reserveDays: reserveDaysStr,
+        minTransferable: minTransferableStr,
+        maxSkuNetworks: String(Math.floor(maxSkuNetworks)),
+        rankingMode,
+        limit: form.rowLimit,
+      });
+      if (form.ownWarehouseCode.trim()) {
+        params.set("ownWarehouseCode", form.ownWarehouseCode.trim());
+      }
+      const qs = params.toString();
+      await downloadForecastFile(
+        `/api/forecast/export-redistribution${qs ? `?${qs}` : ""}`,
+        `redistribution-${rankingMode}-${safeFilenamePart(donorKey)}-latest-h${form.horizonDays}.xlsx`,
+      );
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExporting(false);
+    }
+  }, [
+    donorKey,
+    form.coverageDays,
+    form.horizonDays,
+    form.leadTimeDays,
+    form.ownWarehouseCode,
+    form.replenishmentMode,
+    form.riskStockout,
+    form.rowLimit,
+    form.safetyDays,
+    form.targetCoverageDays,
+    maxSkuNetworks,
+    maxSkuNetworksStr,
+    minTransferableStr,
+    rankingMode,
+    reserveDaysStr,
+  ]);
 
   const openSkuRow = useCallback((r: RedistributionRow) => {
     if (r.kind === "macro") {
@@ -223,6 +281,12 @@ export function RedistributionPage(): JSX.Element {
         </p>
       ) : null}
 
+      {exportError ? (
+        <p class="forecast-next-error" role="alert">
+          Экспорт: {exportError}
+        </p>
+      ) : null}
+
       {meta ? (
         <p class="muted redistribution-meta">
           Загружено строк донора: <strong>{meta.donorRowsLoaded}</strong>, запросов сети по SKU:{" "}
@@ -251,6 +315,17 @@ export function RedistributionPage(): JSX.Element {
         rankingMode={rankingMode}
         skuNetworkSelection={skuNetworkSelection}
         openSkuRow={openSkuRow}
+        exporting={exporting}
+        exportDisabled={
+          exporting ||
+          loading ||
+          results.length === 0 ||
+          !donorKey.trim() ||
+          !reserveOk ||
+          !minOk ||
+          !maxSkuOk
+        }
+        onExport={exportXlsx}
       />
 
       <RedistributionSkuNetworkSection

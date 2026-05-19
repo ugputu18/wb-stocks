@@ -1,6 +1,7 @@
 import type { RankingMode } from "../../utils/wbRedistributionDonorModel.js";
 
 export type LastRedistributionRun = {
+  snapshotDate: string;
   donorKey: string;
   donorReserveDays: number;
   targetCoverageDays: number;

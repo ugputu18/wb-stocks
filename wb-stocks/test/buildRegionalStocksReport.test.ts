@@ -116,6 +116,47 @@ describe("buildRegionalStocksReport", () => {
     expect(out.ownWarehouseCode).toBe("main");
   });
 
+  it("rounds regional shipment to full boxes without exceeding own stock", () => {
+    const base = {
+      snapshotDate: "2026-04-18",
+      horizonDays: 30,
+      macroRegion: "Центральный",
+      targetCoverageDays: 7,
+      stockRows: [],
+      demandRows: [
+        {
+          regionKey: "buyer-central",
+          nmId: 10,
+          techSize: "0",
+          vendorCode: "BOX",
+          regionalForecastDailyDemand: 1,
+        },
+      ],
+      regionMacroLookup: lookup,
+      unitsPerBoxByVendor: new Map<string, number>([["BOX", 6]]),
+    };
+
+    const stock10 = buildRegionalStocksReport({
+      ...base,
+      ownStockByVendor: new Map<string, number>([["BOX", 10]]),
+    }).rows[0]!;
+    expect(stock10.recommendedToRegion).toBe(7);
+    expect(stock10.unitsPerBox).toBe(6);
+    expect(stock10.recommendedOrderQty).toBe(6);
+
+    const stock20 = buildRegionalStocksReport({
+      ...base,
+      ownStockByVendor: new Map<string, number>([["BOX", 20]]),
+    }).rows[0]!;
+    expect(stock20.recommendedOrderQty).toBe(12);
+
+    const stock5 = buildRegionalStocksReport({
+      ...base,
+      ownStockByVendor: new Map<string, number>([["BOX", 5]]),
+    }).rows[0]!;
+    expect(stock5.recommendedOrderQty).toBe(0);
+  });
+
   it("treats missing/blank vendor code in own-stock map as zero (and zero order)", () => {
     const out = buildRegionalStocksReport({
       snapshotDate: "2026-04-18",

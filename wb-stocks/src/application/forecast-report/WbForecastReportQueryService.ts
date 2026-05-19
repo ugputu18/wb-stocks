@@ -13,7 +13,9 @@ import {
   type WbRowReplenishmentReadModel,
 } from "../../domain/multiLevelInventory.js";
 import { DEFAULT_WAREHOUSE_CODE } from "../../domain/ownStockSnapshot.js";
+import { unitsPerBoxForVendor } from "../../domain/productQuant.js";
 import { OwnStockSnapshotRepository } from "../../infra/ownStockSnapshotRepository.js";
+import { ProductQuantRepository } from "../../infra/productQuantRepository.js";
 import { WbForecastSnapshotRepository } from "../../infra/wbForecastSnapshotRepository.js";
 import { enrichReportRow } from "./enrichForecastReportRow.js";
 import type {
@@ -151,6 +153,7 @@ export class WbForecastReportQueryService {
     const ownByVendor = new OwnStockSnapshotRepository(
       this.db,
     ).quantitiesByVendorLatest(ownWh);
+    const unitsPerBoxByVendor = new ProductQuantRepository(this.db).allByVendor();
 
     const leadDays =
       filter.supplierLeadTimeDays !== undefined &&
@@ -178,11 +181,16 @@ export class WbForecastReportQueryService {
 
       const vend = (g.vendorCode ?? "").trim();
       const ownQty = vend ? (ownByVendor.get(vend) ?? 0) : 0;
+      const unitsPerBox = unitsPerBoxForVendor(
+        g.vendorCode,
+        unitsPerBoxByVendor,
+      );
       const part = buildSupplierSkuReplenishment(
         g.sumFd,
         g.sumWb,
         ownQty,
         targetCoverageDays,
+        unitsPerBox,
       );
       const plan = buildSupplierOrderPlan({
         systemDailyDemand: g.sumFd,
@@ -191,6 +199,7 @@ export class WbForecastReportQueryService {
         leadTimeDays: leadDays,
         coverageDays: orderCovDays,
         safetyDays,
+        unitsPerBox,
       });
       out.push({
         nmId: g.nmId,
@@ -334,6 +343,7 @@ export class WbForecastReportQueryService {
     const ownByVendor = new OwnStockSnapshotRepository(
       this.db,
     ).quantitiesByVendorLatest(ownWh);
+    const unitsPerBoxByVendor = new ProductQuantRepository(this.db).allByVendor();
     const tc = filter.replenishmentTargetCoverageDays;
 
     const out: WbTotalBySkuReportRow[] = [];
@@ -349,6 +359,10 @@ export class WbForecastReportQueryService {
       const risk = riskBucketFromDaysOfStock(Math.min(999_999, Math.floor(daysWb)));
       const vend = (g.vendorCode ?? "").trim();
       const ownQty = vend ? (ownByVendor.get(vend) ?? 0) : 0;
+      const unitsPerBox = unitsPerBoxForVendor(
+        g.vendorCode,
+        unitsPerBoxByVendor,
+      );
       const inventoryLevels = buildInventoryLevels(g.sumWb, g.sumWb, ownQty);
 
       let replenishment: WbRowReplenishmentReadModel | undefined;
@@ -360,6 +374,7 @@ export class WbForecastReportQueryService {
           g.sumWb,
           ownQty,
           tc,
+          unitsPerBox,
         ).recommendedFromSupplier;
       }
 
@@ -431,6 +446,7 @@ export class WbForecastReportQueryService {
     const ownByVendor = new OwnStockSnapshotRepository(
       this.db,
     ).quantitiesByVendorLatest(ownWh);
+    const unitsPerBoxByVendor = new ProductQuantRepository(this.db).allByVendor();
     const tc = filter.replenishmentTargetCoverageDays;
 
     const supplierBySku = new Map<string, SupplierSkuReplenishmentReadModel>();
@@ -452,6 +468,10 @@ export class WbForecastReportQueryService {
 
       const vend = (g.vendorCode ?? "").trim();
       const ownQty = vend ? (ownByVendor.get(vend) ?? 0) : 0;
+      const unitsPerBox = unitsPerBoxForVendor(
+        g.vendorCode,
+        unitsPerBoxByVendor,
+      );
       const inventoryLevels = buildInventoryLevels(g.sumWb, g.sumWb, ownQty);
       const daysSys = daysOfStockSystemFromNetworkTotals(
         inventoryLevels.systemAvailable,
@@ -472,6 +492,7 @@ export class WbForecastReportQueryService {
           g.sumWb,
           ownQty,
           tc,
+          unitsPerBox,
         ).recommendedFromSupplier;
       }
 

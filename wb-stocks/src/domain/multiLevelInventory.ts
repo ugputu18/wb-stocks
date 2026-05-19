@@ -3,6 +3,11 @@
  * Не учитывает перемещения между складами (MVP).
  */
 
+import {
+  normalizeUnitsPerBox,
+  roundUpToBoxUnits,
+} from "./productQuant.js";
+
 export type ReplenishmentMode = "wb" | "supplier";
 
 export interface InventoryLevelsReadModel {
@@ -62,6 +67,8 @@ export interface SupplierSkuReplenishmentReadModel {
   wbIncomingUnitsTotal: number;
   ownStock: number;
   systemAvailable: number;
+  /** Кол-во единиц товара в коробе. `1` означает "нет округления". */
+  unitsPerBox: number;
   recommendedFromSupplier: number;
   stockAtArrival: number;
   recommendedOrderQty: number;
@@ -86,6 +93,8 @@ export function buildSupplierOrderPlan(input: {
   coverageDays: number;
   /** default 0 */
   safetyDays?: number;
+  /** default 1 */
+  unitsPerBox?: number;
 }): {
   stockAtArrival: number;
   recommendedOrderQty: number;
@@ -98,12 +107,16 @@ export function buildSupplierOrderPlan(input: {
   const lt = Number(input.leadTimeDays);
   const cov = Number(input.coverageDays);
   const safe = Number(input.safetyDays ?? 0);
+  const unitsPerBox = normalizeUnitsPerBox(input.unitsPerBox);
 
   const systemAvailableNow = wb + own;
   const consumptionDuringLeadTime = d * lt;
   const stockAtArrival = systemAvailableNow - consumptionDuringLeadTime;
   const requiredAfterArrival = d * (cov + safe);
-  const recommendedOrderQty = ceilNonneg(requiredAfterArrival - stockAtArrival);
+  const recommendedOrderQty = roundUpToBoxUnits(
+    requiredAfterArrival - stockAtArrival,
+    unitsPerBox,
+  );
   const willStockoutBeforeArrival = stockAtArrival < 0;
   const daysUntilStockout = d > EPS ? systemAvailableNow / d : null;
 
@@ -226,26 +239,33 @@ export function buildSupplierSkuReplenishment(
   wbAvailableTotal: number,
   ownStock: number,
   targetCoverageDays: number,
+  unitsPerBox: number = 1,
 ): Pick<
   SupplierSkuReplenishmentReadModel,
   | "targetDemandSystem"
   | "wbAvailableTotal"
   | "ownStock"
   | "systemAvailable"
+  | "unitsPerBox"
   | "recommendedFromSupplier"
 > {
   const tc = Number(targetCoverageDays);
   const sumFd = Number(sumForecastDailyDemand);
   const wb = Number(wbAvailableTotal);
   const own = Number(ownStock);
+  const box = normalizeUnitsPerBox(unitsPerBox);
   const targetDemandSystem = sumFd * tc;
   const systemAvailable = wb + own;
-  const recommendedFromSupplier = ceilNonneg(targetDemandSystem - systemAvailable);
+  const recommendedFromSupplier = roundUpToBoxUnits(
+    targetDemandSystem - systemAvailable,
+    box,
+  );
   return {
     targetDemandSystem,
     wbAvailableTotal: wb,
     ownStock: own,
     systemAvailable,
+    unitsPerBox: box,
     recommendedFromSupplier,
   };
 }

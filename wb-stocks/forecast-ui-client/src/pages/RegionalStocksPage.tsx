@@ -484,7 +484,8 @@ export function RegionalStocksPage(): JSX.Element {
                 <HelpToggle label="Цель">
                   Целевое покрытие в днях. Колонка «Нужно» = max(0,
                   цель × «Спрос/день» − «Доступно»); от неё же
-                  зависит «Заказ» = min(Нужно, Склад).
+                  зависит «Заказ»: округляем «Нужно» вверх до целого короба,
+                  но не берём больше целых коробов, чем есть на складе.
                 </HelpToggle>
               </LabelWithInlineHelp>
               <select
@@ -572,7 +573,7 @@ export function RegionalStocksPage(): JSX.Element {
               formatInt(summary.ownWarehouseStockTotal),
             )}
             {summaryCell(
-              "Заказ (min Нужно/Склад)",
+              "Заказ (короба)",
               formatInt(summary.recommendedOrderQtyTotal),
             )}
           </div>
@@ -623,10 +624,13 @@ export function RegionalStocksPage(): JSX.Element {
                     <th title={`Сколько единиц не хватает в контуре «${activeScopeLabel}», чтобы закрыть целевое покрытие`}>
                       Нужно
                     </th>
+                    <th title="Единиц товара в коробе. Если справочник не заполнен — 1.">
+                      Квант
+                    </th>
                     <th title={`Остаток на нашем складе «${data.ownWarehouseCode}» по vendor_code`}>
                       Склад
                     </th>
-                    <th title={`Заказ = min(Нужно, Склад) — сколько реально можно отгрузить под потребность «${activeScopeLabel}»`}>
+                    <th title={`Заказ = целые короба под потребность «${activeScopeLabel}», но не больше целых коробов на складе`}>
                       Заказ
                     </th>
                   </tr>
@@ -649,6 +653,7 @@ export function RegionalStocksPage(): JSX.Element {
                       <td>{formatNum(r.daysOfStockRegional)}</td>
                       <td>{r.stockoutDateEstimate ?? ""}</td>
                       <td>{formatInt(r.recommendedToRegion)}</td>
+                      <td>{formatInt(r.unitsPerBox)}</td>
                       <td>{formatInt(r.ownWarehouseStock)}</td>
                       <td class={r.recommendedOrderQty > 0 ? "regional-stocks-order-cell" : undefined}>
                         {formatInt(r.recommendedOrderQty)}

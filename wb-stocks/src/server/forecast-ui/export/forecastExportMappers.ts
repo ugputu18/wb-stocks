@@ -8,6 +8,12 @@ import type {
   WbForecastSnapshotReportRow,
   WbTotalBySkuReportRow,
 } from "../../../infra/wbForecastSnapshotRepository.js";
+import type {
+  DonorMacroRegionRecommendation,
+  DonorWarehouseRecommendation,
+  RedistributionRow,
+} from "../../../application/redistribution/redistributionModel.js";
+import type { RedistributionRankingMode } from "../parse/exportQuery.js";
 
 /**
  * Колонки и мапперы экспортных отчётов прогноза.
@@ -93,6 +99,7 @@ export const SUPPLIER_EXPORT_COLUMNS = [
   "target_coverage_days",
   "target_demand_system",
   "recommended_from_supplier",
+  "units_per_box",
   "lead_time_days",
   "order_coverage_days",
   "safety_days",
@@ -120,8 +127,48 @@ export const REGIONAL_STOCKS_EXPORT_COLUMNS = [
   "Дней запаса",
   "OOS",
   "Нужно",
+  "Квант",
   "Склад",
   "Заказ",
+] as const;
+
+export const REDISTRIBUTION_REGIONAL_EXPORT_COLUMNS = [
+  "Ранг",
+  "nm_id",
+  "Размер",
+  "vendor",
+  "Донор",
+  "Донор local",
+  "Резерв (шт.)",
+  "Можно забрать",
+  "Регион назначения",
+  "Σ regional / день",
+  "Σ в регионе",
+  "Дн. в регионе",
+  "Нехватка",
+  "Σ На WB (регион)",
+  "Прим. склад",
+  "Прим. склад key",
+  "Перевести",
+  "Score",
+] as const;
+
+export const REDISTRIBUTION_FULFILLMENT_EXPORT_COLUMNS = [
+  "Ранг",
+  "nm_id",
+  "Размер",
+  "vendor",
+  "Донор",
+  "Донор local",
+  "Резерв (шт.)",
+  "Можно забрать",
+  "Куда (склад)",
+  "Куда key",
+  "Спрос/день",
+  "Дн. запаса",
+  "На WB",
+  "Перевести",
+  "Score",
 ] as const;
 
 export function forecastWbXlsxFilename(
@@ -159,6 +206,17 @@ export function regionalStocksXlsxFilename(
   return `stocks-${safeScope}-${snapshotDate}-h${horizonDays}.xlsx`;
 }
 
+export function redistributionXlsxFilename(
+  snapshotDate: string,
+  horizonDays: number,
+  donorWarehouseKey: string,
+  rankingMode: RedistributionRankingMode,
+): string {
+  const safeDonor =
+    donorWarehouseKey.trim().replace(/[\\/:*?"<>|\s]+/g, "_") || "donor";
+  return `redistribution-${rankingMode}-${safeDonor}-${snapshotDate}-h${horizonDays}.xlsx`;
+}
+
 /**
  * Маппинг строк отчёта в формат для записи XLSX. Имена ключей в точности
  * совпадают с заголовками таблицы UI (см. `REGIONAL_STOCKS_EXPORT_COLUMNS`).
@@ -179,9 +237,79 @@ export function regionalStocksRowsToExportObjects(
     "Дней запаса": row.daysOfStockRegional,
     OOS: row.stockoutDateEstimate ?? "",
     "Нужно": row.recommendedToRegion,
+    "Квант": row.unitsPerBox,
     "Склад": row.ownWarehouseStock,
     "Заказ": row.recommendedOrderQty,
   }));
+}
+
+function preferredWarehouseLabel(row: DonorMacroRegionRecommendation): string {
+  if (!row.preferredWarehouseKey) return "";
+  const idx = row.candidateWarehouseKeys.indexOf(row.preferredWarehouseKey);
+  return idx >= 0
+    ? row.candidateWarehouseLabels[idx] ?? row.preferredWarehouseKey
+    : row.preferredWarehouseKey;
+}
+
+function redistributionRegionalRowToExportObject(
+  row: DonorMacroRegionRecommendation,
+): Record<string, unknown> {
+  return {
+    "Ранг": row.priorityRank,
+    nm_id: row.nmId,
+    "Размер": row.techSize,
+    vendor: row.vendorCode,
+    "Донор": row.donorWarehouseKey,
+    "Донор local": row.donorLocalAvailable,
+    "Резерв (шт.)": row.donorReserveUnits,
+    "Можно забрать": row.donorTransferableUnits,
+    "Регион назначения": row.targetMacroRegion,
+    "Σ regional / день": row.targetRegionalDemand,
+    "Σ в регионе": row.regionalAvailableUnits,
+    "Дн. в регионе": row.regionalDaysOfStock,
+    "Нехватка": row.regionalNeedUnits,
+    "Σ На WB (регион)": row.sumRecommendedToWBInRegion,
+    "Прим. склад": preferredWarehouseLabel(row),
+    "Прим. склад key": row.preferredWarehouseKey ?? "",
+    "Перевести": row.recommendedTransferUnitsToRegion,
+    Score: row.transferScore,
+  };
+}
+
+function redistributionFulfillmentRowToExportObject(
+  row: DonorWarehouseRecommendation,
+): Record<string, unknown> {
+  return {
+    "Ранг": row.priorityRank,
+    nm_id: row.nmId,
+    "Размер": row.techSize,
+    vendor: row.vendorCode,
+    "Донор": row.donorWarehouseKey,
+    "Донор local": row.donorLocalAvailable,
+    "Резерв (шт.)": row.donorReserveUnits,
+    "Можно забрать": row.donorTransferableUnits,
+    "Куда (склад)": row.targetWarehouseNameRaw,
+    "Куда key": row.targetWarehouseKey,
+    "Спрос/день": row.targetForecastDailyDemand,
+    "Дн. запаса": row.targetDaysOfStock,
+    "На WB": row.targetRecommendedToWB,
+    "Перевести": row.recommendedTransferUnits,
+    Score: row.transferScore,
+  };
+}
+
+export function redistributionRowsToExportObjects(
+  rows: readonly RedistributionRow[],
+  rankingMode: RedistributionRankingMode,
+): Record<string, unknown>[] {
+  if (rankingMode === "regional") {
+    return rows
+      .filter((row): row is DonorMacroRegionRecommendation => row.kind === "macro")
+      .map(redistributionRegionalRowToExportObject);
+  }
+  return rows
+    .filter((row): row is DonorWarehouseRecommendation => row.kind === "warehouse")
+    .map(redistributionFulfillmentRowToExportObject);
 }
 
 export function wbTotalRowsToExportObjects(
@@ -272,6 +400,7 @@ export function supplierRowsToExportObjects(
     target_coverage_days: targetCoverageDays,
     target_demand_system: r.targetDemandSystem,
     recommended_from_supplier: r.recommendedFromSupplier,
+    units_per_box: r.unitsPerBox,
     lead_time_days: r.leadTimeDays,
     order_coverage_days: r.orderCoverageDays,
     safety_days: r.safetyDays,

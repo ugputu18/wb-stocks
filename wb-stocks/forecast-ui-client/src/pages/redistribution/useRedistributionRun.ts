@@ -88,6 +88,7 @@ export function useRedistributionRun({
         try {
           const rd = await fetchRegionalDemand(
             {
+              snapshotDate: L.snapshotDate,
               skus: top.map((s) => ({ nmId: s.nmId, techSize: s.techSize })),
             },
           );
@@ -157,6 +158,8 @@ export function useRedistributionRun({
     try {
       const sp = toDonorWarehouseRowsParams(form, donorKey);
       const donorRes = await fetchForecastRows(sp);
+      const snapshotDate =
+        typeof donorRes.snapshotDate === "string" ? donorRes.snapshotDate : "";
       const donorRows = Array.isArray(donorRes.rows) ? donorRes.rows : [];
       if (donorRows.length === 0) {
         setError("Нет строк на выбранном складе — проверьте наличие свежего среза и лимит.");
@@ -203,6 +206,7 @@ export function useRedistributionRun({
         try {
           const rd = await fetchRegionalDemand(
             {
+              snapshotDate,
               skus: top.map((s) => ({ nmId: s.nmId, techSize: s.techSize })),
             },
           );
@@ -222,6 +226,7 @@ export function useRedistributionRun({
       const regionalFetchFailed = rankingMode === "regional" && effectiveRankingMode === "fulfillment";
 
       lastRunRef.current = {
+        snapshotDate,
         donorKey: donorKey.trim(),
         donorReserveDays: reserveDays,
         targetCoverageDays: Number(form.targetCoverageDays),

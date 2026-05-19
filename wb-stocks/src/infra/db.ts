@@ -44,6 +44,12 @@ const MIGRATIONS: readonly string[] = [
      ON own_stock_snapshots (snapshot_date, warehouse_code, vendor_code)`,
   `CREATE INDEX IF NOT EXISTS ix_own_stock_snapshots_date_wh
      ON own_stock_snapshots (snapshot_date, warehouse_code)`,
+  `CREATE TABLE IF NOT EXISTS product_quants (
+     vendor_code   TEXT PRIMARY KEY,
+     units_per_box INTEGER NOT NULL CHECK (units_per_box >= 1),
+     source_file   TEXT,
+     imported_at   TEXT NOT NULL
+   )`,
   `CREATE TABLE IF NOT EXISTS wb_supplies (
      supply_id                  INTEGER PRIMARY KEY,
      preorder_id                INTEGER,

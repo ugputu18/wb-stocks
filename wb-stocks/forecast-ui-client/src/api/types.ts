@@ -60,6 +60,7 @@ export interface SupplierReplenishmentRow {
   ownStock: number;
   systemAvailable: number;
   recommendedFromSupplier: number;
+  unitsPerBox: number;
   stockAtArrival: number;
   recommendedOrderQty: number;
   willStockoutBeforeArrival: boolean;
@@ -147,9 +148,11 @@ export interface RegionalStocksResponse {
     daysOfStockRegional: number;
     stockoutDateEstimate: string | null;
     recommendedToRegion: number;
+    /** Кол-во единиц товара в коробе. */
+    unitsPerBox: number;
     /** Кол-во товара на нашем основном складе (по vendor_code). */
     ownWarehouseStock: number;
-    /** «Заказ» = max(recommendedToRegion, ownWarehouseStock). */
+    /** «Заказ» = целые короба, не больше доступного склада. */
     recommendedOrderQty: number;
     stockSnapshotAtMin: string | null;
   }>;

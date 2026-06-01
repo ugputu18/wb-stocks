@@ -87,6 +87,8 @@ export interface RegionalStocksReportSummary {
     attention: number;
     ok: number;
   };
+  wbAvailableTotal: number;
+  wbProjectedConsumptionTotal: number;
   recommendedToRegionTotal: number;
   ownWarehouseStockTotal: number;
   recommendedOrderQtyTotal: number;
@@ -165,16 +167,24 @@ function matchesSearch(row: RegionalStocksReportRow, q: string | null | undefine
   );
 }
 
-function buildSummary(rows: readonly RegionalStocksReportRow[]): RegionalStocksReportSummary {
+function buildSummary(
+  rows: readonly RegionalStocksReportRow[],
+  consumptionDays: number,
+): RegionalStocksReportSummary {
   const summary: RegionalStocksReportSummary = {
     totalRows: rows.length,
     risk: { critical: 0, warning: 0, attention: 0, ok: 0 },
+    wbAvailableTotal: 0,
+    wbProjectedConsumptionTotal: 0,
     recommendedToRegionTotal: 0,
     ownWarehouseStockTotal: 0,
     recommendedOrderQtyTotal: 0,
   };
   for (const r of rows) {
     summary.risk[r.risk] += 1;
+    summary.wbAvailableTotal += r.regionalStartStock + r.regionalIncomingUnits;
+    summary.wbProjectedConsumptionTotal +=
+      r.regionalForecastDailyDemand * consumptionDays;
     summary.recommendedToRegionTotal += r.recommendedToRegion;
     summary.ownWarehouseStockTotal += r.ownWarehouseStock;
     summary.recommendedOrderQtyTotal += r.recommendedOrderQty;
@@ -378,7 +388,7 @@ export function buildRegionalStocksReport(
     macroRegion: input.macroRegion,
     targetCoverageDays: input.targetCoverageDays,
     ownWarehouseCode: input.ownWarehouseCode?.trim() || "main",
-    summary: buildSummary(filtered),
+    summary: buildSummary(filtered, input.targetCoverageDays),
     rows: limited,
   };
 }

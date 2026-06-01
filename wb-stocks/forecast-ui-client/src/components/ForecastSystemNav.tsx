@@ -17,17 +17,23 @@ const NAV_ITEMS = [
   { href: FORECAST_UI_SPA_ROUTES.regionalStocks, label: "Запасы" },
   { href: FORECAST_UI_SPA_ROUTES.manufacturerOrder, label: "Заказ производителю" },
   { href: FORECAST_UI_SPA_ROUTES.redistribution, label: "Перемещение" },
-  { href: FORECAST_UI_SPA_ROUTES.regionalDemandDiagnostics, label: "Регион vs fulfillment" },
-  { href: FORECAST_UI_SPA_ROUTES.warehouseRegionAudit, label: "Аудит складов" },
-  { href: FORECAST_UI_SPA_ROUTES.forecast, label: "Прогноз" },
+  { href: FORECAST_UI_SPA_ROUTES.service, label: "Служебное" },
 ] as const;
 
 function currentPath(): string {
   if (typeof window === "undefined") return FORECAST_UI_SPA_ROUTES.regionalStocks;
   const p = normalizeForecastUiPathname(window.location.pathname || "/");
-  return p === FORECAST_UI_SPA_ROUTES.home
-    ? FORECAST_UI_SPA_ROUTES.regionalStocks
-    : p;
+  if (p === FORECAST_UI_SPA_ROUTES.home) {
+    return FORECAST_UI_SPA_ROUTES.regionalStocks;
+  }
+  if (
+    p === FORECAST_UI_SPA_ROUTES.forecast ||
+    p === FORECAST_UI_SPA_ROUTES.regionalDemandDiagnostics ||
+    p === FORECAST_UI_SPA_ROUTES.warehouseRegionAudit
+  ) {
+    return FORECAST_UI_SPA_ROUTES.service;
+  }
+  return p;
 }
 
 export function ForecastSystemNav({

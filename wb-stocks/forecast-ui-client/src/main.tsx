@@ -6,6 +6,7 @@ import {
   REDISTRIBUTION_ROUTE,
   REGIONAL_DEMAND_DIAGNOSTICS_ROUTE,
   REGIONAL_STOCKS_ROUTE,
+  SERVICE_ROUTE,
   WAREHOUSE_REGION_AUDIT_ROUTE,
 } from "./routes.js";
 import "./forecast-ui-theme.css";
@@ -17,6 +18,7 @@ import { ManufacturerOrderPage } from "./pages/ManufacturerOrderPage.js";
 import { RedistributionPage } from "./pages/RedistributionPage.js";
 import { RegionalDemandDiagnosticsPage } from "./pages/RegionalDemandDiagnosticsPage.js";
 import { RegionalStocksPage } from "./pages/RegionalStocksPage.js";
+import { ServicePage } from "./pages/ServicePage.js";
 import { WarehouseRegionAuditPage } from "./pages/WarehouseRegionAuditPage.js";
 
 function routePath(): string {
@@ -43,6 +45,9 @@ function Root() {
   }
   if (p === REGIONAL_DEMAND_DIAGNOSTICS_ROUTE) {
     return <RegionalDemandDiagnosticsPage />;
+  }
+  if (p === SERVICE_ROUTE) {
+    return <ServicePage />;
   }
   return <RegionalStocksPage />;
 }

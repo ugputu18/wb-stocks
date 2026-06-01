@@ -8,12 +8,12 @@ function url(search: string): URL {
 describe("parseRegionalStocksQuery", () => {
   it("accepts required regional stocks params and defaults target coverage to 42", () => {
     const q = parseRegionalStocksQuery(
-      url("snapshotDate=2026-04-18&horizonDays=10&macroRegion=Центральный"),
+      url("snapshotDate=2026-04-18&horizonDays=0&macroRegion=Центральный"),
     );
     expect(q.ok).toBe(true);
     if (!q.ok) return;
     expect(q.snapshotDate).toBe("2026-04-18");
-    expect(q.horizonDays).toBe(10);
+    expect(q.horizonDays).toBe(0);
     expect(q.stockScope).toBe("region");
     expect(q.targetCoverageDays).toBe(42);
     expect(q.riskStockout).toBe("all");
@@ -69,6 +69,11 @@ describe("parseRegionalStocksQuery", () => {
         url("snapshotDate=2026-04-18&horizonDays=30&macroRegion=Центральный"),
       ).ok,
     ).toBe(false);
+    expect(
+      parseRegionalStocksQuery(
+        url("snapshotDate=2026-04-18&horizonDays=0&macroRegion=Центральный"),
+      ).ok,
+    ).toBe(true);
     expect(
       parseRegionalStocksQuery(url("snapshotDate=2026-04-18&horizonDays=10")).ok,
     ).toBe(false);

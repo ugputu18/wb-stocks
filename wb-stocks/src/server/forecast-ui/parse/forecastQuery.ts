@@ -222,8 +222,8 @@ export function parseRegionalStocksQuery(
   }
 
   const horizonDays = Number(url.searchParams.get("horizonDays"));
-  if (!Number.isInteger(horizonDays) || ![5, 10, 20].includes(horizonDays)) {
-    return { ok: false, error: "horizonDays (5|10|20) required" };
+  if (!Number.isInteger(horizonDays) || ![0, 5, 10, 20].includes(horizonDays)) {
+    return { ok: false, error: "horizonDays (0|5|10|20) required" };
   }
 
   const stockScope = parseRegionalStocksScope(url);

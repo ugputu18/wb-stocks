@@ -2,7 +2,6 @@ import { useCallback, useState } from "preact/hooks";
 import {
   downloadForecastFile,
   postForecastRecalculate,
-  uploadOwnStocksCsv,
 } from "../api/client.js";
 import {
   toSummaryRowsSearchParams,
@@ -16,8 +15,7 @@ export type ActionBusy =
   | null
   | "recalculate"
   | "export-wb"
-  | "export-supplier"
-  | "upload-own-stocks";
+  | "export-supplier";
 
 function fallbackWbXlsxName(snapshotDate: string, horizonDays: string): string {
   return `wb-replenishment-${snapshotDate}-h${horizonDays}.xlsx`;
@@ -126,54 +124,10 @@ export function useForecastActions(params: UseForecastActionsParams) {
     }
   }, [form, clearQDebounce, setStatusLine, setStatusTone]);
 
-  const runUploadOwnStocks = useCallback(
-    async (file: File) => {
-      setActionBusy("upload-own-stocks");
-      setStatusTone("default");
-      setStatusLine(`Загрузка остатков из «${file.name}»…`);
-      try {
-        const warehouse = form.ownWarehouseCode.trim();
-        const result = await uploadOwnStocksCsv(file, {
-          warehouse: warehouse ? warehouse : undefined,
-        });
-        const det = result.detection;
-        const cols = [
-          det.vendorColumn ? `vendor=«${det.vendorColumn}»` : null,
-          det.wbColumn ? `WB=«${det.wbColumn}»` : null,
-          det.quantityColumn ? `остаток=«${det.quantityColumn}»` : null,
-          det.unitColumn ? `ед.=«${det.unitColumn}»` : null,
-        ]
-          .filter(Boolean)
-          .join(", ");
-        const summary =
-          `Остатки загружены: ${result.inserted} строк ` +
-          `(пропущено ${result.skipped}, отфильтровано ${result.filteredOut}, ${
-            result.wasUpdate ? "обновлено" : "создано"
-          } за ${result.snapshotDate}` +
-          `${cols ? `; колонки: ${cols}` : ""}).`;
-        setStatusTone("default");
-        setStatusLine(summary);
-        const r = await reload(form);
-        if (!r.ok && !isStale(r) && "message" in r) {
-          setStatusTone("error");
-          setStatusLine("Загрузка остатков: " + r.message);
-        }
-      } catch (e) {
-        const m = e instanceof Error ? e.message : String(e);
-        setStatusTone("error");
-        setStatusLine("Загрузка остатков: " + m);
-      } finally {
-        setActionBusy(null);
-      }
-    },
-    [form, reload, setStatusLine, setStatusTone],
-  );
-
   return {
     actionBusy,
     runRecalculate,
     runExportWb,
     runExportSupplier,
-    runUploadOwnStocks,
   };
 }

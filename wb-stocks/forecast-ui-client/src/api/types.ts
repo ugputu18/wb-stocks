@@ -132,6 +132,8 @@ export interface RegionalStocksResponse {
       attention: number;
       ok: number;
     };
+    wbAvailableTotal: number;
+    wbProjectedConsumptionTotal: number;
     recommendedToRegionTotal: number;
     ownWarehouseStockTotal: number;
     recommendedOrderQtyTotal: number;

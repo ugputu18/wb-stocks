@@ -9,6 +9,7 @@ export const REGIONAL_STOCKS_ROUTE = "/regional-stocks";
 export const MANUFACTURER_ORDER_ROUTE = "/manufacturer-order";
 export const WAREHOUSE_REGION_AUDIT_ROUTE = "/warehouse-region-audit";
 export const REGIONAL_DEMAND_DIAGNOSTICS_ROUTE = "/regional-demand-diagnostics";
+export const SERVICE_ROUTE = "/service";
 /** Удобный объект для ссылок и сравнения в роутере. */
 export const FORECAST_UI_SPA_ROUTES = {
     home: HOME_ROUTE,
@@ -18,6 +19,7 @@ export const FORECAST_UI_SPA_ROUTES = {
     manufacturerOrder: MANUFACTURER_ORDER_ROUTE,
     warehouseRegionAudit: WAREHOUSE_REGION_AUDIT_ROUTE,
     regionalDemandDiagnostics: REGIONAL_DEMAND_DIAGNOSTICS_ROUTE,
+    service: SERVICE_ROUTE,
 };
 /** Пути кроме {@link HOME_ROUTE}, для которых отдаётся тот же `index.html`. */
 export const FORECAST_UI_SPA_PATHS = [
@@ -27,6 +29,7 @@ export const FORECAST_UI_SPA_PATHS = [
     MANUFACTURER_ORDER_ROUTE,
     WAREHOUSE_REGION_AUDIT_ROUTE,
     REGIONAL_DEMAND_DIAGNOSTICS_ROUTE,
+    SERVICE_ROUTE,
 ];
 export function normalizeForecastUiPathname(pathname) {
     const t = pathname.trim();

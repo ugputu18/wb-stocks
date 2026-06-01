@@ -135,24 +135,28 @@ export function loadRegionalStocksReport(
     };
   }
 
-  const supplyRepo = new WbSupplyRepository(deps.db);
-  const supplies = supplyRepo.getSuppliesByStatuses(
-    SUPPLY_STATUS_INCOMING_FOR_FORECAST,
-  );
-  const items = supplyRepo.getItemsForSupplyIds(supplies.map((s) => s.supplyId));
-  const incoming = selectIncomingSupplies({
-    supplies,
-    itemsBySupplyId: groupSupplyItemsBySupplyId(items),
-    fromDate: snapshotDate,
-    toDate: addDaysYmd(snapshotDate, q.horizonDays - 1),
-    logger: deps.logger,
-  }).incoming;
   const incomingUnitsByKey = new Map<string, number>();
-  for (const [key, arrivals] of incoming) {
-    incomingUnitsByKey.set(
-      key,
-      arrivals.reduce((sum, a) => sum + a.quantity, 0),
+  if (q.horizonDays > 0) {
+    const supplyRepo = new WbSupplyRepository(deps.db);
+    const supplies = supplyRepo.getSuppliesByStatuses(
+      SUPPLY_STATUS_INCOMING_FOR_FORECAST,
     );
+    const items = supplyRepo.getItemsForSupplyIds(
+      supplies.map((s) => s.supplyId),
+    );
+    const incoming = selectIncomingSupplies({
+      supplies,
+      itemsBySupplyId: groupSupplyItemsBySupplyId(items),
+      fromDate: snapshotDate,
+      toDate: addDaysYmd(snapshotDate, q.horizonDays - 1),
+      logger: deps.logger,
+    }).incoming;
+    for (const [key, arrivals] of incoming) {
+      incomingUnitsByKey.set(
+        key,
+        arrivals.reduce((sum, a) => sum + a.quantity, 0),
+      );
+    }
   }
 
   const stockRows = deps.db

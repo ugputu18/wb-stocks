@@ -115,7 +115,6 @@ export function App() {
         supCount={supCount}
         onExportWb={actions.runExportWb}
         onExportSupplier={actions.runExportSupplier}
-        onUploadOwnStocks={actions.runUploadOwnStocks}
       />
 
       <StatusBar

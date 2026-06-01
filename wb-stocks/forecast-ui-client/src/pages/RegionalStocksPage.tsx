@@ -1,11 +1,12 @@
 import type { JSX } from "preact";
-import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   downloadForecastFile,
   fetchRegionalStocks,
   fetchWarehouseTariffs,
   ForecastApiError,
   postForecastRecalculate,
+  uploadOwnStocksCsv,
 } from "../api/client.js";
 import type {
   RegionalStocksResponse,
@@ -50,6 +51,9 @@ const MACRO_REGION_OPTIONS = Array.from(
   new Set(WB_MACRO_REGION_CLUSTERS.flatMap((c) => c.macroRegions)),
 );
 
+const OWN_STOCK_FILE_ACCEPT =
+  ".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
 function parseStockScope(raw: string | null): RegionalStocksScope {
   const t = raw?.trim().toLowerCase() ?? "";
   if (t === "wb") return "wb";
@@ -70,7 +74,6 @@ function initForm(): RegionalStocksForm {
       : new URLSearchParams(window.location.search);
   const macro = params.get("macroRegion")?.trim();
   const target = params.get("targetCoverageDays")?.trim();
-  const incomingDays = params.get("horizonDays")?.trim();
   const macroRegion =
     macro && MACRO_REGION_OPTIONS.includes(macro) ? macro : "Центральный";
   const stockScopeParam = params.get("stockScope");
@@ -81,10 +84,7 @@ function initForm(): RegionalStocksForm {
         ? "region"
         : "wb";
   return {
-    horizonDays:
-      incomingDays === "5" || incomingDays === "10" || incomingDays === "20"
-        ? incomingDays
-        : "10",
+    horizonDays: "0",
     stockScope,
     macroRegion,
     targetCoverageDays:
@@ -111,7 +111,7 @@ function buildSearchParams(form: RegionalStocksForm): URLSearchParams {
   // региону" принципиально работает только со свежим срезом, сервер сам
   // резолвит MAX(snapshot_date).
   const p = new URLSearchParams();
-  p.set("horizonDays", form.horizonDays);
+  p.set("horizonDays", "0");
   p.set("stockScope", form.stockScope);
   if (form.stockScope === "region") p.set("macroRegion", form.macroRegion);
   p.set("targetCoverageDays", form.targetCoverageDays);
@@ -203,12 +203,12 @@ function stockScopeLabel(
 function availabilityTitle(scope: RegionalStocksScope): string {
   switch (scope) {
     case "wb":
-      return "Остаток WB по всей сети + поставки в пути в выбранном горизонте";
+      return "Остаток WB по всей сети";
     case "wbWithOwn":
-      return "Остаток WB по всей сети + поставки в пути + наш локальный склад";
+      return "Остаток WB по всей сети + наш локальный склад";
     case "region":
     default:
-      return "Остаток WB на складах региона + поставки в пути в выбранном горизонте";
+      return "Остаток WB на складах региона";
   }
 }
 
@@ -243,7 +243,10 @@ export function RegionalStocksPage(): JSX.Element {
   const [loading, setLoading] = useState(false);
   const [recalculateBusy, setRecalculateBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [uploadingOwnStocks, setUploadingOwnStocks] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const ownStocksFileInputRef = useRef<HTMLInputElement | null>(null);
   const [warehouseTariffs, setWarehouseTariffs] = useState<
     readonly WarehouseTariff[]
   >([]);
@@ -357,6 +360,40 @@ export function RegionalStocksPage(): JSX.Element {
     }
   }, [load]);
 
+  const uploadOwnStocks = useCallback(
+    async (file: File) => {
+      setUploadingOwnStocks(true);
+      setError(null);
+      setUploadStatus(`Загрузка остатков из «${file.name}»…`);
+      try {
+        const warehouse = data?.ownWarehouseCode?.trim() || "main";
+        const result = await uploadOwnStocksCsv(file, { warehouse });
+        const det = result.detection;
+        const cols = [
+          det.vendorColumn ? `vendor=«${det.vendorColumn}»` : null,
+          det.wbColumn ? `WB=«${det.wbColumn}»` : null,
+          det.quantityColumn ? `остаток=«${det.quantityColumn}»` : null,
+          det.unitColumn ? `ед.=«${det.unitColumn}»` : null,
+        ]
+          .filter(Boolean)
+          .join(", ");
+        setUploadStatus(
+          `Остатки загружены: ${result.inserted} строк ` +
+            `(пропущено ${result.skipped}, отфильтровано ${result.filteredOut})` +
+            `${cols ? `; колонки: ${cols}` : ""}.`,
+        );
+        await load();
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        setError("Загрузка остатков: " + message);
+        setUploadStatus(null);
+      } finally {
+        setUploadingOwnStocks(false);
+      }
+    },
+    [data?.ownWarehouseCode, load],
+  );
+
   const summary = data?.summary;
   const activeStockScope = data?.stockScope ?? form.stockScope;
   const activeScopeLabel = stockScopeLabel(
@@ -403,9 +440,34 @@ export function RegionalStocksPage(): JSX.Element {
         recalculateBusy={recalculateBusy}
         recalculateDisabled={loading}
       />
-      <header class="top">
+      <header class="top regional-stocks-top">
         <h1>Запасы</h1>
+        <div class="regional-stocks-title-actions">
+          <button
+            type="button"
+            class="btn-load"
+            disabled={uploadingOwnStocks}
+            onClick={() => ownStocksFileInputRef.current?.click()}
+          >
+            {uploadingOwnStocks ? "Загрузка…" : "Загрузить остатки"}
+          </button>
+          <input
+            ref={ownStocksFileInputRef}
+            type="file"
+            accept={OWN_STOCK_FILE_ACCEPT}
+            style={{ display: "none" }}
+            onChange={(ev) => {
+              const input = ev.currentTarget as HTMLInputElement;
+              const file = input.files?.[0];
+              if (file) void uploadOwnStocks(file);
+              input.value = "";
+            }}
+          />
+        </div>
       </header>
+      {uploadStatus ? (
+        <p class="muted regional-stocks-upload-status">{uploadStatus}</p>
+      ) : null}
 
       <section class="panel regional-stocks-controls">
         <div class="regional-stocks-controls-grid">
@@ -465,26 +527,6 @@ export function RegionalStocksPage(): JSX.Element {
             </label>
           </div>
           <div class="regional-stocks-row">
-            <label>
-              <LabelWithInlineHelp>
-                В пути за
-                <HelpToggle label="В пути за">
-                  Горизонт учёта входящих WB-поставок: сколько дней вперёд от
-                  даты среза суммируем единицы со статусами «создана / в пути
-                  / приёмка». Влияет на колонку «Доступно».
-                </HelpToggle>
-              </LabelWithInlineHelp>
-              <select
-                value={form.horizonDays}
-                onChange={(e) =>
-                  patch({ horizonDays: (e.target as HTMLSelectElement).value })
-                }
-              >
-                <option value="5">5 дн.</option>
-                <option value="10">10 дн.</option>
-                <option value="20">20 дн.</option>
-              </select>
-            </label>
             <label>
               <LabelWithInlineHelp>
                 Цель
@@ -571,16 +613,21 @@ export function RegionalStocksPage(): JSX.Element {
             {summaryCell("< 14 дн.", summary.risk.warning, "risk-warning")}
             {summaryCell("< 30 дн.", summary.risk.attention, "risk-attention")}
             {summaryCell("OK ≥30", summary.risk.ok, "risk-ok")}
+            {summaryCell("Остатки WB", formatInt(summary.wbAvailableTotal))}
+            {summaryCell(
+              "Расход WB",
+              formatInt(summary.wbProjectedConsumptionTotal),
+            )}
             {summaryCell(
               needSummaryLabel(activeStockScope),
               formatInt(summary.recommendedToRegionTotal),
             )}
             {summaryCell(
-              `Склад «${data?.ownWarehouseCode ?? "main"}»`,
+              "Остатки склада",
               formatInt(summary.ownWarehouseStockTotal),
             )}
             {summaryCell(
-              "Заказ (короба)",
+              "Заказ",
               formatInt(summary.recommendedOrderQtyTotal),
             )}
           </div>
@@ -685,6 +732,21 @@ export function RegionalStocksPage(): JSX.Element {
       ) : null}
 
       <style>{`
+        .regional-stocks-page .regional-stocks-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.75rem 1rem;
+        }
+        .regional-stocks-page .regional-stocks-title-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+        .regional-stocks-page .regional-stocks-upload-status {
+          margin: -0.35rem 0 0.75rem;
+          font-size: 0.84rem;
+        }
         .regional-stocks-page .regional-stocks-controls-grid {
           display: flex;
           flex-direction: column;

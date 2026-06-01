@@ -44,6 +44,8 @@ describe("buildRegionalStocksReport", () => {
     expect(out.rows[0]!.recommendedToRegion).toBe(390);
     expect(out.rows[0]!.ownWarehouseStock).toBe(0);
     expect(out.rows[0]!.recommendedOrderQty).toBe(0); // min(390, 0)
+    expect(out.summary.wbAvailableTotal).toBe(30);
+    expect(out.summary.wbProjectedConsumptionTotal).toBe(420);
     expect(out.summary.recommendedToRegionTotal).toBe(390);
     expect(out.summary.ownWarehouseStockTotal).toBe(0);
     expect(out.summary.recommendedOrderQtyTotal).toBe(0);
@@ -111,6 +113,8 @@ describe("buildRegionalStocksReport", () => {
     expect(b.ownWarehouseStock).toBe(5);
     expect(b.recommendedOrderQty).toBe(5); // min(420, 5)
 
+    expect(out.summary.wbAvailableTotal).toBe(100);
+    expect(out.summary.wbProjectedConsumptionTotal).toBe(630);
     expect(out.summary.ownWarehouseStockTotal).toBe(1005);
     expect(out.summary.recommendedOrderQtyTotal).toBe(115);
     expect(out.ownWarehouseCode).toBe("main");

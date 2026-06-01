@@ -147,6 +147,7 @@ export interface RegionalStocksResponse {
     regionalForecastDailyDemand: number;
     daysOfStockRegional: number;
     stockoutDateEstimate: string | null;
+    /** «Нужно» = нехватка до цели, округлённая вверх до целого короба. */
     recommendedToRegion: number;
     /** Кол-во единиц товара в коробе. */
     unitsPerBox: number;

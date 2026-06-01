@@ -5,6 +5,7 @@ import {
 } from "../domain/multiLevelInventory.js";
 import {
   roundRegionalShipmentToBoxes,
+  roundUpToBoxUnits,
   unitsPerBoxForVendor,
 } from "../domain/productQuant.js";
 import {
@@ -54,6 +55,10 @@ export interface RegionalStocksReportRow {
   regionalForecastDailyDemand: number;
   daysOfStockRegional: number;
   stockoutDateEstimate: string | null;
+  /**
+   * Suggested missing quantity for this SKU under the regional plan, rounded
+   * up to full boxes.
+   */
   recommendedToRegion: number;
   /** Кол-во единиц товара в коробе. `1` означает "нет округления". */
   unitsPerBox: number;
@@ -306,9 +311,13 @@ export function buildRegionalStocksReport(
       regionalAvailable,
       regionalForecastDailyDemand,
     );
-    const recommendedToRegion = Math.max(
+    const rawRecommendedToRegion = Math.max(
       0,
-      Math.ceil(input.targetCoverageDays * regionalForecastDailyDemand - regionalAvailable),
+      input.targetCoverageDays * regionalForecastDailyDemand - regionalAvailable,
+    );
+    const recommendedToRegion = roundUpToBoxUnits(
+      rawRecommendedToRegion,
+      unitsPerBox,
     );
     const risk = riskBucketFromDaysOfStock(
       Math.min(999_999, Math.floor(daysOfStockRegional)),

@@ -7,6 +7,7 @@ export type { ForecastUiSpaPath } from "../../src/forecastUiRoutes.js";
 export {
   FORECAST_UI_SPA_PATHS,
   FORECAST_UI_SPA_ROUTES,
+  FORECAST_ROUTE,
   HOME_ROUTE,
   MANUFACTURER_ORDER_ROUTE,
   REDISTRIBUTION_ROUTE,

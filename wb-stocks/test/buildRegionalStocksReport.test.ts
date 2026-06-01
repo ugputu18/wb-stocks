@@ -116,7 +116,7 @@ describe("buildRegionalStocksReport", () => {
     expect(out.ownWarehouseCode).toBe("main");
   });
 
-  it("rounds regional shipment to full boxes without exceeding own stock", () => {
+  it("rounds regional need and shipment to full boxes without exceeding own stock", () => {
     const base = {
       snapshotDate: "2026-04-18",
       horizonDays: 30,
@@ -140,7 +140,7 @@ describe("buildRegionalStocksReport", () => {
       ...base,
       ownStockByVendor: new Map<string, number>([["BOX", 10]]),
     }).rows[0]!;
-    expect(stock10.recommendedToRegion).toBe(7);
+    expect(stock10.recommendedToRegion).toBe(12);
     expect(stock10.unitsPerBox).toBe(6);
     expect(stock10.recommendedOrderQty).toBe(6);
 
@@ -148,12 +148,14 @@ describe("buildRegionalStocksReport", () => {
       ...base,
       ownStockByVendor: new Map<string, number>([["BOX", 20]]),
     }).rows[0]!;
+    expect(stock20.recommendedToRegion).toBe(12);
     expect(stock20.recommendedOrderQty).toBe(12);
 
     const stock5 = buildRegionalStocksReport({
       ...base,
       ownStockByVendor: new Map<string, number>([["BOX", 5]]),
     }).rows[0]!;
+    expect(stock5.recommendedToRegion).toBe(12);
     expect(stock5.recommendedOrderQty).toBe(0);
   });
 

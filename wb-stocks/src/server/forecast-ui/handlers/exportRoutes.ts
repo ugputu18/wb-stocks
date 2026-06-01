@@ -18,6 +18,7 @@ import {
   redistributionXlsxFilename,
   REGIONAL_STOCKS_EXPORT_COLUMNS,
   regionalStocksXlsxFilename,
+  regionalStocksRowsForExport,
   regionalStocksRowsToExportObjects,
   supplierRowsToExportObjects,
   SUPPLIER_EXPORT_COLUMNS,
@@ -202,9 +203,9 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
       },
     },
     {
-      // Только позиции с ненулевым «Заказ» (recommendedOrderQty > 0):
+      // Только позиции с ненулевым «Нужно» (recommendedToRegion > 0):
       // экспорт оптимизирован под кейс "что заказать с производства / у поставщика
-      // под выбранный регион".
+      // под выбранный регион", даже если на нашем складе сейчас 0.
       match: (req, url) =>
         req.method === "GET" &&
         url.pathname === "/api/forecast/export-regional-stocks",
@@ -223,9 +224,7 @@ export function createExportRoutes(deps: ForecastUiHandlerDeps): ForecastRouteMa
           json(res, outcome.status, { ok: false, error: outcome.error });
           return;
         }
-        const filteredRows = outcome.report.rows.filter(
-          (r) => r.recommendedOrderQty > 0,
-        );
+        const filteredRows = regionalStocksRowsForExport(outcome.report.rows);
         const buffer = await toXlsxBuffer(
           regionalStocksRowsToExportObjects(filteredRows),
           [...REGIONAL_STOCKS_EXPORT_COLUMNS],

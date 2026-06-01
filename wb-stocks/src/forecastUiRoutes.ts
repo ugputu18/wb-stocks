@@ -3,6 +3,7 @@
  */
 
 export const HOME_ROUTE = "/";
+export const FORECAST_ROUTE = "/forecast";
 export const REDISTRIBUTION_ROUTE = "/redistribution";
 export const REGIONAL_STOCKS_ROUTE = "/regional-stocks";
 export const MANUFACTURER_ORDER_ROUTE = "/manufacturer-order";
@@ -11,6 +12,7 @@ export const REGIONAL_DEMAND_DIAGNOSTICS_ROUTE = "/regional-demand-diagnostics";
 
 export const FORECAST_UI_SPA_ROUTES = {
   home: HOME_ROUTE,
+  forecast: FORECAST_ROUTE,
   redistribution: REDISTRIBUTION_ROUTE,
   regionalStocks: REGIONAL_STOCKS_ROUTE,
   manufacturerOrder: MANUFACTURER_ORDER_ROUTE,
@@ -19,6 +21,7 @@ export const FORECAST_UI_SPA_ROUTES = {
 } as const;
 
 export const FORECAST_UI_SPA_PATHS = [
+  FORECAST_ROUTE,
   REDISTRIBUTION_ROUTE,
   REGIONAL_STOCKS_ROUTE,
   MANUFACTURER_ORDER_ROUTE,

@@ -1,6 +1,7 @@
 import { render } from "preact";
 import {
   normalizeForecastUiPathname,
+  FORECAST_ROUTE,
   MANUFACTURER_ORDER_ROUTE,
   REDISTRIBUTION_ROUTE,
   REGIONAL_DEMAND_DIAGNOSTICS_ROUTE,
@@ -25,11 +26,14 @@ function routePath(): string {
 
 function Root() {
   const p = routePath();
+  if (p === "/" || p === REGIONAL_STOCKS_ROUTE) {
+    return <RegionalStocksPage />;
+  }
+  if (p === FORECAST_ROUTE) {
+    return <App />;
+  }
   if (p === REDISTRIBUTION_ROUTE) {
     return <RedistributionPage />;
-  }
-  if (p === REGIONAL_STOCKS_ROUTE) {
-    return <RegionalStocksPage />;
   }
   if (p === MANUFACTURER_ORDER_ROUTE) {
     return <ManufacturerOrderPage />;
@@ -40,7 +44,7 @@ function Root() {
   if (p === REGIONAL_DEMAND_DIAGNOSTICS_ROUTE) {
     return <RegionalDemandDiagnosticsPage />;
   }
-  return <App />;
+  return <RegionalStocksPage />;
 }
 
 const root = document.getElementById("root");

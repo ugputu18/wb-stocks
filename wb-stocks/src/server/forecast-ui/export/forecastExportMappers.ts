@@ -126,8 +126,8 @@ export const REGIONAL_STOCKS_EXPORT_COLUMNS = [
   "Спрос/день",
   "Дней запаса",
   "OOS",
+  "Короб",
   "Нужно",
-  "Квант",
   "Склад",
   "Заказ",
 ] as const;
@@ -170,6 +170,12 @@ export const REDISTRIBUTION_FULFILLMENT_EXPORT_COLUMNS = [
   "Перевести",
   "Score",
 ] as const;
+
+export function regionalStocksRowsForExport(
+  rows: readonly RegionalStocksReportRow[],
+): RegionalStocksReportRow[] {
+  return rows.filter((row) => row.recommendedToRegion > 0);
+}
 
 export function forecastWbXlsxFilename(
   snapshotDate: string,
@@ -221,7 +227,7 @@ export function redistributionXlsxFilename(
  * Маппинг строк отчёта в формат для записи XLSX. Имена ключей в точности
  * совпадают с заголовками таблицы UI (см. `REGIONAL_STOCKS_EXPORT_COLUMNS`).
  *
- * Экспортируется ВСЁ что приходит — фильтрация «Заказ > 0» делается на
+ * Экспортируется ВСЁ что приходит — фильтрация «Нужно > 0» делается на
  * стороне роута (см. `exportRoutes.ts`).
  */
 export function regionalStocksRowsToExportObjects(
@@ -236,8 +242,8 @@ export function regionalStocksRowsToExportObjects(
     "Спрос/день": row.regionalForecastDailyDemand,
     "Дней запаса": row.daysOfStockRegional,
     OOS: row.stockoutDateEstimate ?? "",
+    "Короб": row.unitsPerBox,
     "Нужно": row.recommendedToRegion,
-    "Квант": row.unitsPerBox,
     "Склад": row.ownWarehouseStock,
     "Заказ": row.recommendedOrderQty,
   }));

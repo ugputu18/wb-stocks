@@ -323,8 +323,8 @@ export function RegionalStocksPage(): JSX.Element {
     setError(null);
     try {
       const params = new URLSearchParams(sp);
-      // Сервер уже фильтрует по recommendedOrderQty > 0, лимит UI здесь
-      // не нужен — экспортируем все позиции к заказу.
+      // Сервер уже фильтрует по recommendedToRegion > 0, лимит UI здесь
+      // не нужен — экспортируем все позиции с ненулевым «Нужно».
       params.delete("limit");
       const qs = params.toString();
       // Если ответа ещё нет (теоретически — кнопка disabled, но на всякий
@@ -339,7 +339,7 @@ export function RegionalStocksPage(): JSX.Element {
     } finally {
       setExporting(false);
     }
-  }, [data?.snapshotDate, form.horizonDays, form.stockScope, sp]);
+  }, [data?.snapshotDate, form.horizonDays, form.macroRegion, form.stockScope, sp]);
 
   const recalculate = useCallback(async () => {
     setRecalculateBusy(true);
@@ -364,8 +364,15 @@ export function RegionalStocksPage(): JSX.Element {
     data?.macroRegion ?? form.macroRegion,
   );
   const activeAvailabilityTitle = availabilityTitle(activeStockScope);
-  const orderableRowCount = useMemo(
-    () => data?.rows.filter((r) => r.recommendedOrderQty > 0).length ?? 0,
+  const neededRowCount = useMemo(
+    () => data?.rows.filter((r) => r.recommendedToRegion > 0).length ?? 0,
+    [data],
+  );
+  const neededRowsInStockCount = useMemo(
+    () =>
+      data?.rows.filter(
+        (r) => r.recommendedToRegion > 0 && r.ownWarehouseStock > 0,
+      ).length ?? 0,
     [data],
   );
 
@@ -483,9 +490,9 @@ export function RegionalStocksPage(): JSX.Element {
                 Цель
                 <HelpToggle label="Цель">
                   Целевое покрытие в днях. Колонка «Нужно» = max(0,
-                  цель × «Спрос/день» − «Доступно»); от неё же
-                  зависит «Заказ»: округляем «Нужно» вверх до целого короба,
-                  но не берём больше целых коробов, чем есть на складе.
+                  цель × «Спрос/день» − «Доступно»), округлённая вверх до
+                  целого короба. «Заказ» не берёт больше целых коробов, чем
+                  есть на складе.
                 </HelpToggle>
               </LabelWithInlineHelp>
               <select
@@ -588,19 +595,22 @@ export function RegionalStocksPage(): JSX.Element {
               {data.targetCoverageDays} дн.
             </h2>
             <div class="regional-stocks-table-actions">
-              <span class="muted regional-stocks-export-hint">
-                {orderableRowCount > 0
-                  ? `К заказу: ${orderableRowCount} ${
-                      orderableRowCount === 1 ? "позиция" : "позиций"
-                    }`
-                  : "Нет позиций к заказу"}
+              <span
+                class="muted regional-stocks-export-hint"
+                title={`«На складе» — сколько позиций с ненулевым «Нужно» имеют остаток на складе «${data.ownWarehouseCode}»`}
+              >
+                {neededRowCount > 0
+                  ? `Нужно: ${neededRowCount} ${
+                      neededRowCount === 1 ? "позиция" : "позиций"
+                    } · на складе: ${neededRowsInStockCount}`
+                  : "Нет позиций с ненулевым «Нужно»"}
               </span>
               <button
                 type="button"
                 class="btn-load"
-                disabled={exporting || orderableRowCount === 0}
+                disabled={exporting || neededRowCount === 0}
                 onClick={() => void exportXlsx()}
-                title="Экспортировать в Excel (XLSX) только позиции с ненулевым «Заказ»"
+                title="Экспортировать в Excel (XLSX) только позиции с ненулевым «Нужно»"
               >
                 {exporting ? "Экспорт…" : "Экспорт в Excel"}
               </button>
@@ -621,11 +631,11 @@ export function RegionalStocksPage(): JSX.Element {
                     </th>
                     <th>Дней запаса</th>
                     <th>OOS</th>
-                    <th title={`Сколько единиц не хватает в контуре «${activeScopeLabel}», чтобы закрыть целевое покрытие`}>
-                      Нужно
-                    </th>
                     <th title="Единиц товара в коробе. Если справочник не заполнен — 1.">
-                      Квант
+                      Короб
+                    </th>
+                    <th title={`Сколько единиц не хватает в контуре «${activeScopeLabel}», чтобы закрыть целевое покрытие. Округлено вверх до целого короба.`}>
+                      Нужно
                     </th>
                     <th title={`Остаток на нашем складе «${data.ownWarehouseCode}» по vendor_code`}>
                       Склад
@@ -652,8 +662,8 @@ export function RegionalStocksPage(): JSX.Element {
                       <td>{formatNum(r.regionalForecastDailyDemand)}</td>
                       <td>{formatNum(r.daysOfStockRegional)}</td>
                       <td>{r.stockoutDateEstimate ?? ""}</td>
-                      <td>{formatInt(r.recommendedToRegion)}</td>
                       <td>{formatInt(r.unitsPerBox)}</td>
+                      <td>{formatInt(r.recommendedToRegion)}</td>
                       <td>{formatInt(r.ownWarehouseStock)}</td>
                       <td class={r.recommendedOrderQty > 0 ? "regional-stocks-order-cell" : undefined}>
                         {formatInt(r.recommendedOrderQty)}

@@ -50,6 +50,64 @@ function DdVal({ v }: { v: unknown }) {
   return <>{String(v)}</>;
 }
 
+function hasDemandDiagnostics(row: Record<string, unknown>): boolean {
+  return (
+    row.demandModelVersion != null ||
+    row.rawAvgDaily7 != null ||
+    row.adjustedAvgDaily7 != null ||
+    row.constrainedDays90 != null ||
+    row.peakDailyDemand != null
+  );
+}
+
+function pushDemandDiagnosticsPairs(
+  pairs: [string, unknown][],
+  row: Record<string, unknown>,
+  scopeLabel: string,
+): void {
+  if (!hasDemandDiagnostics(row)) return;
+  pairs.push(
+    [`— Demand model (${scopeLabel})`, ""],
+    ["Модель спроса", row.demandModelVersion ?? "—"],
+    [
+      "Raw среднее 7д / 30д / 90д",
+      [formatNum(row.rawAvgDaily7), formatNum(row.rawAvgDaily30), formatNum(row.rawAvgDaily90)].join(" / "),
+    ],
+    [
+      "Adjusted среднее 7д / 30д / 90д",
+      [
+        formatNum(row.adjustedAvgDaily7),
+        formatNum(row.adjustedAvgDaily30),
+        formatNum(row.adjustedAvgDaily90),
+      ].join(" / "),
+    ],
+    [
+      "Sellable-дни 7д / 30д / 90д",
+      [row.sellableDays7, row.sellableDays30, row.sellableDays90]
+        .filter((x) => x != null)
+        .join(" / ") || "—",
+    ],
+    [
+      "Constrained-дни 7д / 30д / 90д",
+      [row.constrainedDays7, row.constrainedDays30, row.constrainedDays90]
+        .filter((x) => x != null)
+        .join(" / ") || "—",
+    ],
+    [
+      "Дней с WB-остатком 7д / 30д / 90д",
+      [
+        row.availabilityObservedDays7,
+        row.availabilityObservedDays30,
+        row.availabilityObservedDays90,
+      ]
+        .filter((x) => x != null)
+        .join(" / ") || "—",
+    ],
+    ["Peak daily demand", formatDetailVal(row.peakDailyDemand)],
+    ["Allocation scale", formatDetailVal(row.forecastAllocationScale)],
+  );
+}
+
 interface Props {
   row: unknown | null;
   viewMode: ForecastViewMode;
@@ -115,6 +173,7 @@ export function DetailPanel({ row, viewMode, explainFocus, supplierRows }: Props
       ["Заказ (LT)", formatInt(r.recommendedOrderQty)],
       ["Риск до прихода (план LT)", r.willStockoutBeforeArrival ? "да" : "нет"],
     );
+    pushDemandDiagnosticsPairs(pairs, r, "SKU total");
   } else if (viewKind === "wbTotal") {
     pairs.push(
       ["Режим строки", "WB в целом (одна строка на SKU по сети)"],
@@ -134,6 +193,7 @@ export function DetailPanel({ row, viewMode, explainFocus, supplierRows }: Props
       ["Рекомендация на WB (сеть)", formatInt(rep && typeof rep === "object" ? (rep as Record<string, unknown>).recommendedToWB : null)],
       ["Рекомендация у производителя (SKU)", formatInt(r.recommendedFromSupplier)],
     );
+    pushDemandDiagnosticsPairs(pairs, r, "SKU total");
   } else {
     pairs.push(
       ["Bucket риска", r.risk],
@@ -184,6 +244,7 @@ export function DetailPanel({ row, viewMode, explainFocus, supplierRows }: Props
         ["regionalDeficit (локально пусто, запас есть)", io.regionalDeficit ? "да" : "нет"],
       );
     }
+    pushDemandDiagnosticsPairs(pairs, r, "warehouse row");
     if (rep && typeof rep === "object") {
       const rp = rep as Record<string, unknown>;
       pairs.push(

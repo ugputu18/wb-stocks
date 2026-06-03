@@ -6,6 +6,7 @@ import {
   buildDemandRecords,
   computeDemandSnapshot,
 } from "../src/application/computeDemandSnapshot.js";
+import { skuDemandKey } from "../src/application/demandAvailability.js";
 import type { WbOrdersDailyRecord } from "../src/domain/wbOrder.js";
 
 function silentLogger() {
@@ -104,7 +105,8 @@ describe("buildDemandRecords (pure aggregation)", () => {
     expect(r.avgDaily90).toBeCloseTo(60 / 90, 10);
     expect(r.baseDailyDemand).toBeCloseTo(60 / 90, 10);
     expect(r.trendRatioClamped).toBe(0.75);
-    expect(r.forecastDailyDemand).toBeCloseTo((60 / 90) * 0.75, 10);
+    expect(r.peakDailyDemand).toBeCloseTo(1, 10);
+    expect(r.forecastDailyDemand).toBeCloseTo(1, 10);
   });
 
   it("clamps trendRatio upward to 1.25 when last week explodes", () => {
@@ -122,7 +124,48 @@ describe("buildDemandRecords (pure aggregation)", () => {
     expect(r.avgDaily30).toBeCloseTo(70 / 30, 10);
     expect(r.trendRatio).toBeGreaterThan(1.25);
     expect(r.trendRatioClamped).toBe(1.25);
-    expect(r.forecastDailyDemand).toBeCloseTo(r.baseDailyDemand * 1.25, 10);
+    expect(r.peakDailyDemand).toBeCloseTo(10, 10);
+    expect(r.forecastDailyDemand).toBeCloseTo(10, 10);
+  });
+
+  it("censors low-stock days using WB-wide SKU availability", () => {
+    const rows: WbOrdersDailyRecord[] = [];
+    const availability = new Map<string, number>();
+
+    for (let day = 20; day <= 26; day += 1) {
+      const date = `2026-03-${String(day).padStart(2, "0")}`;
+      rows.push(order(date, 10));
+      availability.set(date, 50);
+    }
+    for (let day = 27; day <= 31; day += 1) {
+      const date = `2026-03-${String(day).padStart(2, "0")}`;
+      rows.push(order(date, 1));
+      availability.set(date, 2);
+    }
+    for (let day = 1; day <= 16; day += 1) {
+      const date = `2026-04-${String(day).padStart(2, "0")}`;
+      rows.push(order(date, 1));
+      availability.set(date, 2);
+    }
+
+    const out = buildDemandRecords(rows, SNAP, TO, "now", {
+      availabilityBySku: new Map([[skuDemandKey(100, "0"), availability]]),
+    });
+    const r = out[0]!;
+    expect(r.rawAvgDaily30).toBeCloseTo((70 + 21) / 30, 10);
+    expect(r.constrainedDays30).toBe(21);
+    expect(r.sellableDays30).toBe(9);
+    expect(r.adjustedAvgDaily30).toBeCloseTo(70 / 9, 10);
+    expect(r.forecastDailyDemand).toBeGreaterThan(r.rawAvgDaily30!);
+    expect(r.forecastDailyDemand).toBeCloseTo(10, 10);
+  });
+
+  it("does not treat a single spike as the absolute peak", () => {
+    const rows = [order("2026-04-16", 50)];
+    const r = buildDemandRecords(rows, SNAP, TO, "now")[0]!;
+    expect(r.peakDailyDemand).toBeLessThan(50);
+    expect(r.peakDailyDemand).toBeCloseTo(50 / 7, 10);
+    expect(r.forecastDailyDemand).toBeCloseTo(50 / 7, 10);
   });
 
   it("clamps trendRatio downward to 0.75 when last week collapses", () => {

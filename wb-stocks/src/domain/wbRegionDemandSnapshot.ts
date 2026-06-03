@@ -1,8 +1,10 @@
+import type { DemandDiagnosticsFields } from "./demandDiagnostics.js";
+
 /**
  * Снимок спроса по региону заказа (`regionName` из WB), ключ `(snapshot_date, region_key, nm_id, tech_size)`.
  * Формулы avg/forecast — те же, что у `wb_demand_snapshots`.
  */
-export interface WbRegionDemandSnapshotRecord {
+export interface WbRegionDemandSnapshotRecord extends DemandDiagnosticsFields {
   snapshotDate: string;
   regionNameRaw: string | null;
   regionKey: string;

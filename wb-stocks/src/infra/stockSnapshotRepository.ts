@@ -1,5 +1,15 @@
 import type { DbHandle } from "./db.js";
 import type { StockSnapshotRecord } from "../domain/stockSnapshot.js";
+import { warehouseKey } from "../domain/warehouseName.js";
+
+export interface DailyStockAvailabilityRecord {
+  stockDate: string;
+  warehouseNameRaw: string;
+  warehouseKey: string;
+  nmId: number;
+  techSize: string;
+  quantity: number;
+}
 
 /**
  * Idempotency: uniqueness is enforced at DB level on
@@ -116,5 +126,55 @@ export class StockSnapshotRepository {
           ORDER BY id`,
       )
       .all(snapshotAt) as StockSnapshotRecord[];
+  }
+
+  /**
+   * Daily on-hand availability for demand censoring.
+   *
+   * `wb_orders_daily.order_date` is Moscow-date based, so stock snapshots are
+   * bucketed with a fixed `+3 hours` shift. For multiple imports in one day we
+   * keep the max daily quantity per `(warehouse, sku)` to avoid marking a day
+   * constrained when the item was replenished and sellable for part of that day.
+   */
+  getDailyAvailabilityRange(
+    dateFrom: string,
+    dateTo: string,
+  ): DailyStockAvailabilityRecord[] {
+    const rows = this.db
+      .prepare(
+        `SELECT stockDate,
+                warehouseNameRaw,
+                nmId,
+                techSize,
+                MAX(quantity) AS quantity
+           FROM (
+             SELECT date(snapshot_at, '+3 hours') AS stockDate,
+                    snapshot_at AS snapshotAt,
+                    warehouse_name AS warehouseNameRaw,
+                    nm_id AS nmId,
+                    COALESCE(tech_size, '') AS techSize,
+                    SUM(quantity) AS quantity
+               FROM wb_stock_snapshots
+              WHERE date(snapshot_at, '+3 hours') BETWEEN ? AND ?
+              GROUP BY stockDate, snapshotAt, warehouseNameRaw, nmId, techSize
+           )
+          GROUP BY stockDate, warehouseNameRaw, nmId, techSize
+          ORDER BY stockDate, warehouseNameRaw, nmId, techSize`,
+      )
+      .all(dateFrom, dateTo) as Array<{
+      stockDate: string;
+      warehouseNameRaw: string;
+      nmId: number;
+      techSize: string;
+      quantity: number;
+    }>;
+    return rows.map((r) => ({
+      stockDate: r.stockDate,
+      warehouseNameRaw: r.warehouseNameRaw,
+      warehouseKey: warehouseKey(r.warehouseNameRaw),
+      nmId: r.nmId,
+      techSize: r.techSize,
+      quantity: Number(r.quantity ?? 0),
+    }));
   }
 }

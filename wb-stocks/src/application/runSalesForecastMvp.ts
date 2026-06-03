@@ -293,6 +293,7 @@ export async function runSalesForecastMvp(
       {
         ordersRepository,
         demandRepository,
+        stockRepository,
         logger,
         now,
       },
@@ -318,6 +319,7 @@ export async function runSalesForecastMvp(
       {
         ordersByRegionRepository,
         regionDemandRepository,
+        stockRepository,
         logger,
         now,
       },

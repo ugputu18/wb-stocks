@@ -93,7 +93,8 @@ describe("buildRegionDemandRecords", () => {
     expect(r.units90).toBe(60);
     expect(r.avgDaily90).toBeCloseTo(60 / 90, 10);
     expect(r.baseDailyDemand).toBeCloseTo(60 / 90, 10);
-    expect(r.regionalForecastDailyDemand).toBeCloseTo((60 / 90) * 0.75, 10);
+    expect(r.peakDailyDemand).toBeCloseTo(1, 10);
+    expect(r.regionalForecastDailyDemand).toBeCloseTo(1, 10);
   });
 
   it("keeps separate rows per region key", () => {

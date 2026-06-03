@@ -1,3 +1,5 @@
+import type { DemandDiagnosticsFields } from "./demandDiagnostics.js";
+
 /**
  * One row in `wb_demand_snapshots`.
  *
@@ -16,7 +18,7 @@
  * `vendorCode` / `barcode` are payload-only debug aids; the join key is
  * `(snapshotDate, warehouseKey, nmId, techSize)`.
  */
-export interface WbDemandSnapshotRecord {
+export interface WbDemandSnapshotRecord extends DemandDiagnosticsFields {
   snapshotDate: string; // YYYY-MM-DD
   warehouseNameRaw: string | null;
   warehouseKey: string;

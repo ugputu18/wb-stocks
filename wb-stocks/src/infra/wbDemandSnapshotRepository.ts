@@ -1,5 +1,6 @@
 import type { DbHandle } from "./db.js";
 import type { WbDemandSnapshotRecord } from "../domain/wbDemandSnapshot.js";
+import { legacyDemandDiagnosticsDefaults } from "../application/censoredPeakDemand.js";
 
 /**
  * Repository for `wb_demand_snapshots`.
@@ -28,12 +29,28 @@ export class WbDemandSnapshotRepository {
          snapshot_date, warehouse_name_raw, warehouse_key, nm_id, tech_size,
          vendor_code, barcode, units7, units30, units90, avg_daily_7, avg_daily_30, avg_daily_90,
          base_daily_demand, trend_ratio, trend_ratio_clamped,
-         forecast_daily_demand, computed_at
+         forecast_daily_demand,
+         demand_model_version,
+         raw_avg_daily_7, raw_avg_daily_30, raw_avg_daily_90,
+         adjusted_avg_daily_7, adjusted_avg_daily_30, adjusted_avg_daily_90,
+         sellable_days_7, sellable_days_30, sellable_days_90,
+         constrained_days_7, constrained_days_30, constrained_days_90,
+         availability_observed_days_7, availability_observed_days_30, availability_observed_days_90,
+         peak_daily_demand, forecast_allocation_scale,
+         computed_at
        ) VALUES (
          @snapshotDate, @warehouseNameRaw, @warehouseKey, @nmId, @techSize,
          @vendorCode, @barcode, @units7, @units30, @units90, @avgDaily7, @avgDaily30, @avgDaily90,
          @baseDailyDemand, @trendRatio, @trendRatioClamped,
-         @forecastDailyDemand, @computedAt
+         @forecastDailyDemand,
+         @demandModelVersion,
+         @rawAvgDaily7, @rawAvgDaily30, @rawAvgDaily90,
+         @adjustedAvgDaily7, @adjustedAvgDaily30, @adjustedAvgDaily90,
+         @sellableDays7, @sellableDays30, @sellableDays90,
+         @constrainedDays7, @constrainedDays30, @constrainedDays90,
+         @availabilityObservedDays7, @availabilityObservedDays30, @availabilityObservedDays90,
+         @peakDailyDemand, @forecastAllocationScale,
+         @computedAt
        )`,
     );
     let deleted = 0;
@@ -42,7 +59,7 @@ export class WbDemandSnapshotRepository {
       (batch: readonly WbDemandSnapshotRecord[]) => {
         deleted = del.run(snapshotDate).changes;
         for (const r of batch) {
-          ins.run(r);
+          ins.run(withDemandDiagnosticsDefaults(r));
           inserted += 1;
         }
       },
@@ -71,6 +88,24 @@ export class WbDemandSnapshotRepository {
                 trend_ratio           AS trendRatio,
                 trend_ratio_clamped   AS trendRatioClamped,
                 forecast_daily_demand AS forecastDailyDemand,
+                demand_model_version  AS demandModelVersion,
+                raw_avg_daily_7       AS rawAvgDaily7,
+                raw_avg_daily_30      AS rawAvgDaily30,
+                raw_avg_daily_90      AS rawAvgDaily90,
+                adjusted_avg_daily_7  AS adjustedAvgDaily7,
+                adjusted_avg_daily_30 AS adjustedAvgDaily30,
+                adjusted_avg_daily_90 AS adjustedAvgDaily90,
+                sellable_days_7       AS sellableDays7,
+                sellable_days_30      AS sellableDays30,
+                sellable_days_90      AS sellableDays90,
+                constrained_days_7    AS constrainedDays7,
+                constrained_days_30   AS constrainedDays30,
+                constrained_days_90   AS constrainedDays90,
+                availability_observed_days_7  AS availabilityObservedDays7,
+                availability_observed_days_30 AS availabilityObservedDays30,
+                availability_observed_days_90 AS availabilityObservedDays90,
+                peak_daily_demand     AS peakDailyDemand,
+                forecast_allocation_scale AS forecastAllocationScale,
                 computed_at           AS computedAt
            FROM wb_demand_snapshots
           WHERE snapshot_date = ?
@@ -87,4 +122,10 @@ export class WbDemandSnapshotRepository {
       .get(snapshotDate) as { c: number };
     return r.c;
   }
+}
+
+function withDemandDiagnosticsDefaults(
+  r: WbDemandSnapshotRecord,
+): WbDemandSnapshotRecord {
+  return { ...legacyDemandDiagnosticsDefaults(r), ...r };
 }

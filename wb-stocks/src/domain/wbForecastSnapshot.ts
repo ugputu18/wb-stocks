@@ -1,3 +1,5 @@
+import type { DemandDiagnosticsFields } from "./demandDiagnostics.js";
+
 /**
  * One row in `wb_forecast_snapshots`.
  *
@@ -32,7 +34,7 @@
  * `vendorCode` / `barcode` are payload-only and copied through from the
  * demand snapshot for debugging convenience.
  */
-export interface WbForecastSnapshotRecord {
+export interface WbForecastSnapshotRecord extends DemandDiagnosticsFields {
   snapshotDate: string; // YYYY-MM-DD
   horizonDays: number;
   warehouseNameRaw: string | null;

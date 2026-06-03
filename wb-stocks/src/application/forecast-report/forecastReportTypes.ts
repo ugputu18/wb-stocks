@@ -1,4 +1,5 @@
 import type { WbForecastSnapshotRecord } from "../../domain/wbForecastSnapshot.js";
+import type { DemandDiagnosticsFields } from "../../domain/demandDiagnostics.js";
 import type { ForecastRiskBucket } from "../../domain/forecastRiskBucket.js";
 import type {
   InventoryLevelsReadModel,
@@ -85,7 +86,7 @@ export type ForecastViewMode = "wbTotal" | "wbWarehouses" | "systemTotal";
  * Одна строка = SKU по всей сети WB (read-side GROUP BY `nm_id`, `tech_size`).
  * `daysOfStockWB` = `wbAvailableTotal / forecastDailyDemandTotal` (при нулевом спросе — см. домен).
  */
-export interface WbTotalBySkuReportRow {
+export interface WbTotalBySkuReportRow extends DemandDiagnosticsFields {
   viewKind: "wbTotal";
   nmId: number;
   techSize: string;
@@ -112,7 +113,7 @@ export interface WbTotalBySkuReportRow {
  * Одна строка = SKU: риск и дни запаса по **системному** пулу (WB∑ + own), read-side.
  * `recommendedToWB` / `recommendedFromSupplier` / `recommendedOrderQty` — те же величины, что в режимах WB total и supplier-витрине (без двойного суммирования).
  */
-export interface SystemTotalBySkuReportRow {
+export interface SystemTotalBySkuReportRow extends DemandDiagnosticsFields {
   viewKind: "systemTotal";
   nmId: number;
   techSize: string;

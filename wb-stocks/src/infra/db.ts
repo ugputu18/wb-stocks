@@ -332,6 +332,7 @@ export function openDatabase(path: string): DbHandle {
   db.pragma("foreign_keys = ON");
   runMigrations(db);
   migrateDemandWindowColumns(db);
+  migrateDemandDiagnosticsColumns(db);
   migrateRegionDemandSnapshotColumn(db);
   migrateMergeSiberianFarEasternMacroRegions(db);
   return db;
@@ -345,6 +346,81 @@ function migrateDemandWindowColumns(db: DbHandle): void {
   ensureColumn(db, "wb_forecast_snapshots", "avg_daily_90", "REAL NOT NULL DEFAULT 0");
   ensureColumn(db, "wb_region_demand_snapshots", "units90", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "wb_region_demand_snapshots", "avg_daily_90", "REAL NOT NULL DEFAULT 0");
+}
+
+/** Старые БД: добавляем explainability для censored-peak demand без изменения legacy-чисел. */
+function migrateDemandDiagnosticsColumns(db: DbHandle): void {
+  for (const table of [
+    "wb_demand_snapshots",
+    "wb_forecast_snapshots",
+    "wb_region_demand_snapshots",
+  ]) {
+    ensureColumn(
+      db,
+      table,
+      "demand_model_version",
+      "TEXT NOT NULL DEFAULT 'legacy-v1'",
+    );
+    ensureColumn(db, table, "raw_avg_daily_7", "REAL NOT NULL DEFAULT 0");
+    ensureColumn(db, table, "raw_avg_daily_30", "REAL NOT NULL DEFAULT 0");
+    ensureColumn(db, table, "raw_avg_daily_90", "REAL NOT NULL DEFAULT 0");
+    ensureColumn(db, table, "adjusted_avg_daily_7", "REAL NOT NULL DEFAULT 0");
+    ensureColumn(db, table, "adjusted_avg_daily_30", "REAL NOT NULL DEFAULT 0");
+    ensureColumn(db, table, "adjusted_avg_daily_90", "REAL NOT NULL DEFAULT 0");
+    ensureColumn(db, table, "sellable_days_7", "INTEGER NOT NULL DEFAULT 7");
+    ensureColumn(db, table, "sellable_days_30", "INTEGER NOT NULL DEFAULT 30");
+    ensureColumn(db, table, "sellable_days_90", "INTEGER NOT NULL DEFAULT 90");
+    ensureColumn(db, table, "constrained_days_7", "INTEGER NOT NULL DEFAULT 0");
+    ensureColumn(db, table, "constrained_days_30", "INTEGER NOT NULL DEFAULT 0");
+    ensureColumn(db, table, "constrained_days_90", "INTEGER NOT NULL DEFAULT 0");
+    ensureColumn(
+      db,
+      table,
+      "availability_observed_days_7",
+      "INTEGER NOT NULL DEFAULT 0",
+    );
+    ensureColumn(
+      db,
+      table,
+      "availability_observed_days_30",
+      "INTEGER NOT NULL DEFAULT 0",
+    );
+    ensureColumn(
+      db,
+      table,
+      "availability_observed_days_90",
+      "INTEGER NOT NULL DEFAULT 0",
+    );
+    ensureColumn(db, table, "peak_daily_demand", "REAL NOT NULL DEFAULT 0");
+    ensureColumn(
+      db,
+      table,
+      "forecast_allocation_scale",
+      "REAL NOT NULL DEFAULT 1",
+    );
+    db.exec(
+      `UPDATE ${table}
+          SET demand_model_version = 'legacy-v1',
+              raw_avg_daily_7 = avg_daily_7,
+              raw_avg_daily_30 = avg_daily_30,
+              raw_avg_daily_90 = avg_daily_90,
+              adjusted_avg_daily_7 = avg_daily_7,
+              adjusted_avg_daily_30 = avg_daily_30,
+              adjusted_avg_daily_90 = avg_daily_90,
+              sellable_days_7 = 7,
+              sellable_days_30 = 30,
+              sellable_days_90 = 90,
+              constrained_days_7 = 0,
+              constrained_days_30 = 0,
+              constrained_days_90 = 0,
+              availability_observed_days_7 = 0,
+              availability_observed_days_30 = 0,
+              availability_observed_days_90 = 0,
+              peak_daily_demand = 0,
+              forecast_allocation_scale = 1
+        WHERE demand_model_version = 'legacy-v1'`,
+    );
+  }
 }
 
 function ensureColumn(

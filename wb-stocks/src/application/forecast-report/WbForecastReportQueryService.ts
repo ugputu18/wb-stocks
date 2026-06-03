@@ -84,6 +84,24 @@ export class WbForecastReportQueryService {
                 trend_ratio           AS trendRatio,
                 trend_ratio_clamped   AS trendRatioClamped,
                 forecast_daily_demand AS forecastDailyDemand,
+                demand_model_version  AS demandModelVersion,
+                raw_avg_daily_7       AS rawAvgDaily7,
+                raw_avg_daily_30      AS rawAvgDaily30,
+                raw_avg_daily_90      AS rawAvgDaily90,
+                adjusted_avg_daily_7  AS adjustedAvgDaily7,
+                adjusted_avg_daily_30 AS adjustedAvgDaily30,
+                adjusted_avg_daily_90 AS adjustedAvgDaily90,
+                sellable_days_7       AS sellableDays7,
+                sellable_days_30      AS sellableDays30,
+                sellable_days_90      AS sellableDays90,
+                constrained_days_7    AS constrainedDays7,
+                constrained_days_30   AS constrainedDays30,
+                constrained_days_90   AS constrainedDays90,
+                availability_observed_days_7  AS availabilityObservedDays7,
+                availability_observed_days_30 AS availabilityObservedDays30,
+                availability_observed_days_90 AS availabilityObservedDays90,
+                peak_daily_demand     AS peakDailyDemand,
+                forecast_allocation_scale AS forecastAllocationScale,
                 stock_snapshot_at     AS stockSnapshotAt,
                 start_stock           AS startStock,
                 incoming_units        AS incomingUnits,
@@ -316,7 +334,25 @@ export class WbForecastReportQueryService {
                 SUM(incoming_units) AS sumIncoming,
                 MIN(stockout_date) AS stockoutDateWB,
                 MAX(vendor_code) AS vendorCode,
-                MIN(stock_snapshot_at) AS minStockSnapshotAt
+                MIN(stock_snapshot_at) AS minStockSnapshotAt,
+                MAX(demand_model_version) AS demandModelVersion,
+                SUM(raw_avg_daily_7) AS rawAvgDaily7,
+                SUM(raw_avg_daily_30) AS rawAvgDaily30,
+                SUM(raw_avg_daily_90) AS rawAvgDaily90,
+                SUM(adjusted_avg_daily_7) AS adjustedAvgDaily7,
+                SUM(adjusted_avg_daily_30) AS adjustedAvgDaily30,
+                SUM(adjusted_avg_daily_90) AS adjustedAvgDaily90,
+                MAX(sellable_days_7) AS sellableDays7,
+                MAX(sellable_days_30) AS sellableDays30,
+                MAX(sellable_days_90) AS sellableDays90,
+                MAX(constrained_days_7) AS constrainedDays7,
+                MAX(constrained_days_30) AS constrainedDays30,
+                MAX(constrained_days_90) AS constrainedDays90,
+                MAX(availability_observed_days_7) AS availabilityObservedDays7,
+                MAX(availability_observed_days_30) AS availabilityObservedDays30,
+                MAX(availability_observed_days_90) AS availabilityObservedDays90,
+                SUM(peak_daily_demand * forecast_allocation_scale) AS peakDailyDemand,
+                MAX(forecast_allocation_scale) AS forecastAllocationScale
            FROM wb_forecast_snapshots
           WHERE snapshot_date = ? AND horizon_days = ?
           GROUP BY nm_id, tech_size`,
@@ -331,6 +367,24 @@ export class WbForecastReportQueryService {
       stockoutDateWB: string | null;
       vendorCode: string | null;
       minStockSnapshotAt: string | null;
+      demandModelVersion: string;
+      rawAvgDaily7: number;
+      rawAvgDaily30: number;
+      rawAvgDaily90: number;
+      adjustedAvgDaily7: number;
+      adjustedAvgDaily30: number;
+      adjustedAvgDaily90: number;
+      sellableDays7: number;
+      sellableDays30: number;
+      sellableDays90: number;
+      constrainedDays7: number;
+      constrainedDays30: number;
+      constrainedDays90: number;
+      availabilityObservedDays7: number;
+      availabilityObservedDays30: number;
+      availabilityObservedDays90: number;
+      peakDailyDemand: number;
+      forecastAllocationScale: number;
     }[];
 
     const scopeKeys = skuKeysMatchingScope(
@@ -391,6 +445,24 @@ export class WbForecastReportQueryService {
         wbStartStockTotal: g.sumStartStock,
         wbIncomingUnitsTotal: g.sumIncoming,
         ownStock: ownQty,
+        demandModelVersion: g.demandModelVersion,
+        rawAvgDaily7: g.rawAvgDaily7,
+        rawAvgDaily30: g.rawAvgDaily30,
+        rawAvgDaily90: g.rawAvgDaily90,
+        adjustedAvgDaily7: g.adjustedAvgDaily7,
+        adjustedAvgDaily30: g.adjustedAvgDaily30,
+        adjustedAvgDaily90: g.adjustedAvgDaily90,
+        sellableDays7: g.sellableDays7,
+        sellableDays30: g.sellableDays30,
+        sellableDays90: g.sellableDays90,
+        constrainedDays7: g.constrainedDays7,
+        constrainedDays30: g.constrainedDays30,
+        constrainedDays90: g.constrainedDays90,
+        availabilityObservedDays7: g.availabilityObservedDays7,
+        availabilityObservedDays30: g.availabilityObservedDays30,
+        availabilityObservedDays90: g.availabilityObservedDays90,
+        peakDailyDemand: g.peakDailyDemand,
+        forecastAllocationScale: g.forecastAllocationScale,
         risk,
         inventoryLevels,
         replenishment,
@@ -420,7 +492,25 @@ export class WbForecastReportQueryService {
                 SUM(start_stock) AS sumStartStock,
                 SUM(incoming_units) AS sumIncoming,
                 MAX(vendor_code) AS vendorCode,
-                MIN(stock_snapshot_at) AS minStockSnapshotAt
+                MIN(stock_snapshot_at) AS minStockSnapshotAt,
+                MAX(demand_model_version) AS demandModelVersion,
+                SUM(raw_avg_daily_7) AS rawAvgDaily7,
+                SUM(raw_avg_daily_30) AS rawAvgDaily30,
+                SUM(raw_avg_daily_90) AS rawAvgDaily90,
+                SUM(adjusted_avg_daily_7) AS adjustedAvgDaily7,
+                SUM(adjusted_avg_daily_30) AS adjustedAvgDaily30,
+                SUM(adjusted_avg_daily_90) AS adjustedAvgDaily90,
+                MAX(sellable_days_7) AS sellableDays7,
+                MAX(sellable_days_30) AS sellableDays30,
+                MAX(sellable_days_90) AS sellableDays90,
+                MAX(constrained_days_7) AS constrainedDays7,
+                MAX(constrained_days_30) AS constrainedDays30,
+                MAX(constrained_days_90) AS constrainedDays90,
+                MAX(availability_observed_days_7) AS availabilityObservedDays7,
+                MAX(availability_observed_days_30) AS availabilityObservedDays30,
+                MAX(availability_observed_days_90) AS availabilityObservedDays90,
+                SUM(peak_daily_demand * forecast_allocation_scale) AS peakDailyDemand,
+                MAX(forecast_allocation_scale) AS forecastAllocationScale
            FROM wb_forecast_snapshots
           WHERE snapshot_date = ? AND horizon_days = ?
           GROUP BY nm_id, tech_size`,
@@ -434,6 +524,24 @@ export class WbForecastReportQueryService {
       sumIncoming: number;
       vendorCode: string | null;
       minStockSnapshotAt: string | null;
+      demandModelVersion: string;
+      rawAvgDaily7: number;
+      rawAvgDaily30: number;
+      rawAvgDaily90: number;
+      adjustedAvgDaily7: number;
+      adjustedAvgDaily30: number;
+      adjustedAvgDaily90: number;
+      sellableDays7: number;
+      sellableDays30: number;
+      sellableDays90: number;
+      constrainedDays7: number;
+      constrainedDays30: number;
+      constrainedDays90: number;
+      availabilityObservedDays7: number;
+      availabilityObservedDays30: number;
+      availabilityObservedDays90: number;
+      peakDailyDemand: number;
+      forecastAllocationScale: number;
     }[];
 
     const scopeKeys = skuKeysMatchingScope(
@@ -529,6 +637,24 @@ export class WbForecastReportQueryService {
         wbStartStockTotal: g.sumStartStock,
         wbIncomingUnitsTotal: g.sumIncoming,
         ownStock: ownQty,
+        demandModelVersion: g.demandModelVersion,
+        rawAvgDaily7: g.rawAvgDaily7,
+        rawAvgDaily30: g.rawAvgDaily30,
+        rawAvgDaily90: g.rawAvgDaily90,
+        adjustedAvgDaily7: g.adjustedAvgDaily7,
+        adjustedAvgDaily30: g.adjustedAvgDaily30,
+        adjustedAvgDaily90: g.adjustedAvgDaily90,
+        sellableDays7: g.sellableDays7,
+        sellableDays30: g.sellableDays30,
+        sellableDays90: g.sellableDays90,
+        constrainedDays7: g.constrainedDays7,
+        constrainedDays30: g.constrainedDays30,
+        constrainedDays90: g.constrainedDays90,
+        availabilityObservedDays7: g.availabilityObservedDays7,
+        availabilityObservedDays30: g.availabilityObservedDays30,
+        availabilityObservedDays90: g.availabilityObservedDays90,
+        peakDailyDemand: g.peakDailyDemand,
+        forecastAllocationScale: g.forecastAllocationScale,
         risk,
         inventoryLevels,
         replenishment,

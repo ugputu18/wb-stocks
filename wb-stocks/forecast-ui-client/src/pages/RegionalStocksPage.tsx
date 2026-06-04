@@ -23,9 +23,11 @@ import {
   type MacroRegionWarehouseInfo,
 } from "../utils/wbWarehouseRegion.js";
 import {
+  formatProductBrandLabel,
+  formatProductNameLabel,
+} from "../../../src/application/productDisplay.js";
+import {
   badgeClass,
-  formatInt,
-  formatNum,
   riskLabelWbTotal,
 } from "../utils/forecastFormat.js";
 import { HelpToggle } from "../components/HelpToggle.js";
@@ -177,6 +179,20 @@ function formatRouble(n: number): string {
   return Number.isInteger(n)
     ? String(n)
     : n.toFixed(2).replace(/\.?0+$/, "").replace(".", ",");
+}
+
+function formatMoney(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "—";
+  return `${new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: 0,
+  }).format(n)}\u00A0₽`;
+}
+
+function formatWhole(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "—";
+  return new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: 0,
+  }).format(Math.round(n));
 }
 
 function formatWarehouseHint(w: WarehouseHintEntry): string {
@@ -581,7 +597,7 @@ export function RegionalStocksPage(): JSX.Element {
               Поиск
               <input
                 type="search"
-                placeholder="nm_id, артикул…"
+                placeholder="nm_id, артикул, бренд, предмет…"
                 value={form.q}
                 onInput={(e) => patch({ q: (e.target as HTMLInputElement).value })}
               />
@@ -608,27 +624,28 @@ export function RegionalStocksPage(): JSX.Element {
         <section class="panel regional-stocks-summary">
           <h2>Сводка: {activeScopeLabel}</h2>
           <div class="summary-grid summary-grid-operational">
-            {summaryCell("Строк SKU", summary.totalRows)}
-            {summaryCell("< 7 дн.", summary.risk.critical, "risk-critical")}
-            {summaryCell("< 14 дн.", summary.risk.warning, "risk-warning")}
-            {summaryCell("< 30 дн.", summary.risk.attention, "risk-attention")}
-            {summaryCell("OK ≥30", summary.risk.ok, "risk-ok")}
-            {summaryCell("Остатки WB", formatInt(summary.wbAvailableTotal))}
+            {summaryCell("Строк SKU", formatWhole(summary.totalRows))}
+            {summaryCell("< 7 дн.", formatWhole(summary.risk.critical), "risk-critical")}
+            {summaryCell("< 14 дн.", formatWhole(summary.risk.warning), "risk-warning")}
+            {summaryCell("< 30 дн.", formatWhole(summary.risk.attention), "risk-attention")}
+            {summaryCell("OK ≥30", formatWhole(summary.risk.ok), "risk-ok")}
+            {summaryCell("Остатки WB", formatWhole(summary.wbAvailableTotal))}
             {summaryCell(
               "Расход WB",
-              formatInt(summary.wbProjectedConsumptionTotal),
+              formatWhole(summary.wbProjectedConsumptionTotal),
             )}
+            {summaryCell("Выручка", formatMoney(summary.projectedRevenueTotal))}
             {summaryCell(
               needSummaryLabel(activeStockScope),
-              formatInt(summary.recommendedToRegionTotal),
+              formatWhole(summary.recommendedToRegionTotal),
             )}
             {summaryCell(
               "Остатки склада",
-              formatInt(summary.ownWarehouseStockTotal),
+              formatWhole(summary.ownWarehouseStockTotal),
             )}
             {summaryCell(
               "Заказ",
-              formatInt(summary.recommendedOrderQtyTotal),
+              formatWhole(summary.recommendedOrderQtyTotal),
             )}
           </div>
         </section>
@@ -671,7 +688,8 @@ export function RegionalStocksPage(): JSX.Element {
                     <th>Риск</th>
                     <th>vendor</th>
                     <th>nm_id</th>
-                    <th>Размер</th>
+                    <th>Бренд</th>
+                    <th>Предмет</th>
                     <th title={activeAvailabilityTitle}>Доступно</th>
                     <th>
                       <DemandPerDayHeader help={REGIONAL_STOCKS_DEMAND_PER_DAY_HELP} />
@@ -700,20 +718,25 @@ export function RegionalStocksPage(): JSX.Element {
                           {riskLabelWbTotal(r.risk)}
                         </span>
                       </td>
-                      <td>{r.vendorCode ?? ""}</td>
+                      <td class="regional-stocks-vendor-cell">{r.vendorCode ?? ""}</td>
                       <td>{r.nmId}</td>
-                      <td>{r.techSize}</td>
-                      <td title={activeAvailabilityTitle}>
-                        {formatInt(r.regionalAvailable)}
+                      <td class="regional-stocks-brand-cell">
+                        {formatProductBrandLabel(r.brand)}
                       </td>
-                      <td>{formatNum(r.regionalForecastDailyDemand)}</td>
-                      <td>{formatNum(r.daysOfStockRegional)}</td>
+                      <td class="regional-stocks-product-cell">
+                        {formatProductNameLabel(r.productName)}
+                      </td>
+                      <td title={activeAvailabilityTitle}>
+                        {formatWhole(r.regionalAvailable)}
+                      </td>
+                      <td>{formatWhole(r.regionalForecastDailyDemand)}</td>
+                      <td>{formatWhole(r.daysOfStockRegional)}</td>
                       <td>{r.stockoutDateEstimate ?? ""}</td>
-                      <td>{formatInt(r.unitsPerBox)}</td>
-                      <td>{formatInt(r.recommendedToRegion)}</td>
-                      <td>{formatInt(r.ownWarehouseStock)}</td>
+                      <td>{formatWhole(r.unitsPerBox)}</td>
+                      <td>{formatWhole(r.recommendedToRegion)}</td>
+                      <td>{formatWhole(r.ownWarehouseStock)}</td>
                       <td class={r.recommendedOrderQty > 0 ? "regional-stocks-order-cell" : undefined}>
-                        {formatInt(r.recommendedOrderQty)}
+                        {formatWhole(r.recommendedOrderQty)}
                       </td>
                     </tr>
                   ))}
@@ -803,6 +826,19 @@ export function RegionalStocksPage(): JSX.Element {
         .regional-stocks-page .regional-stocks-table td:nth-child(2) {
           white-space: normal;
           min-width: 8rem;
+        }
+        .regional-stocks-page .regional-stocks-vendor-cell,
+        .regional-stocks-page .regional-stocks-brand-cell,
+        .regional-stocks-page .regional-stocks-product-cell {
+          white-space: normal;
+          line-height: 1.25;
+        }
+        .regional-stocks-page .regional-stocks-brand-cell {
+          min-width: 6rem;
+        }
+        .regional-stocks-page .regional-stocks-product-cell {
+          min-width: 11rem;
+          max-width: 20rem;
         }
         .regional-stocks-page .regional-stocks-table-header {
           display: flex;

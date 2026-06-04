@@ -3,6 +3,10 @@ import type {
   RegionalStocksReportRow,
   RegionalStocksScope,
 } from "../../../application/buildRegionalStocksReport.js";
+import {
+  formatProductBrandLabel,
+  formatProductNameLabel,
+} from "../../../application/productDisplay.js";
 import type {
   SystemTotalBySkuReportRow,
   WbForecastSnapshotReportRow,
@@ -169,7 +173,8 @@ export const REGIONAL_STOCKS_EXPORT_COLUMNS = [
   "Риск",
   "vendor",
   "nm_id",
-  "Размер",
+  "Бренд",
+  "Предмет",
   "Доступно",
   "Спрос/день",
   "Дней запаса",
@@ -285,7 +290,8 @@ export function regionalStocksRowsToExportObjects(
     "Риск": row.risk,
     vendor: row.vendorCode ?? "",
     nm_id: row.nmId,
-    "Размер": row.techSize,
+    "Бренд": formatProductBrandLabel(row.brand),
+    "Предмет": formatProductNameLabel(row.productName),
     "Доступно": row.regionalAvailable,
     "Спрос/день": row.regionalForecastDailyDemand,
     "Дней запаса": row.daysOfStockRegional,

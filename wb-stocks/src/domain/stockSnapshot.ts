@@ -24,6 +24,11 @@ export const wbStocksApiRowSchema = z.object({
   inWayFromClient: z.number().int().optional(),
   quantityFull: z.number().int().optional(),
   techSize: z.string().optional(),
+  category: z.string().nullish(),
+  subject: z.string().nullish(),
+  brand: z.string().nullish(),
+  Price: optionalFiniteNumber(),
+  Discount: optionalFiniteNumber(),
 });
 
 export type WbStocksApiRow = z.infer<typeof wbStocksApiRowSchema>;
@@ -44,4 +49,31 @@ export interface StockSnapshotRecord {
   inWayFromClient: number | null;
   quantityFull: number | null;
   lastChangeDate: string | null;
+}
+
+export interface WbProductCatalogRecord {
+  nmId: number;
+  techSize: string;
+  vendorCode: string | null;
+  category: string | null;
+  subject: string | null;
+  brand: string | null;
+  price: number | null;
+  discount: number | null;
+  salePrice: number | null;
+  updatedAt: string;
+}
+
+function optionalFiniteNumber() {
+  return z
+    .preprocess((raw) => {
+      if (typeof raw === "number") return Number.isFinite(raw) ? raw : undefined;
+      if (typeof raw === "string") {
+        const t = raw.trim().replace(",", ".");
+        if (t === "") return undefined;
+        const n = Number(t);
+        return Number.isFinite(n) ? n : undefined;
+      }
+      return undefined;
+    }, z.number().optional());
 }

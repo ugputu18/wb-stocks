@@ -50,6 +50,19 @@ const MIGRATIONS: readonly string[] = [
      source_file   TEXT,
      imported_at   TEXT NOT NULL
    )`,
+  `CREATE TABLE IF NOT EXISTS wb_product_catalog (
+     nm_id       INTEGER NOT NULL,
+     tech_size   TEXT    NOT NULL,
+     vendor_code TEXT,
+     category    TEXT,
+     subject     TEXT,
+     brand       TEXT,
+     price       REAL,
+     discount    REAL,
+     sale_price  REAL,
+     updated_at  TEXT    NOT NULL,
+     PRIMARY KEY (nm_id, tech_size)
+   )`,
   `CREATE TABLE IF NOT EXISTS wb_supplies (
      supply_id                  INTEGER PRIMARY KEY,
      preorder_id                INTEGER,

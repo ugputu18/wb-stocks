@@ -13,6 +13,10 @@ function regionalRow(
     nmId: 1,
     techSize: "0",
     vendorCode: "SKU-1",
+    category: null,
+    subject: null,
+    brand: null,
+    productName: null,
     risk: "critical",
     regionalStartStock: 0,
     regionalIncomingUnits: 0,
@@ -24,6 +28,8 @@ function regionalRow(
     unitsPerBox: 6,
     ownWarehouseStock: 0,
     recommendedOrderQty: 0,
+    salePrice: null,
+    projectedRevenue: 0,
     stockSnapshotAtMin: null,
     ...overrides,
   };
@@ -35,7 +41,8 @@ describe("forecast export mappers", () => {
       "Риск",
       "vendor",
       "nm_id",
-      "Размер",
+      "Бренд",
+      "Предмет",
       "Доступно",
       "Спрос/день",
       "Дней запаса",
@@ -48,9 +55,16 @@ describe("forecast export mappers", () => {
 
     expect(
       regionalStocksRowsToExportObjects([
-        regionalRow({ recommendedToRegion: 12, recommendedOrderQty: 0 }),
+        regionalRow({
+          brand: "Canpol Babies",
+          productName: "Бутылочки для кормления",
+          recommendedToRegion: 12,
+          recommendedOrderQty: 0,
+        }),
       ])[0],
     ).toMatchObject({
+      "Бренд": "Canpol",
+      "Предмет": "Бутылочки",
       "Короб": 6,
       "Нужно": 12,
     });

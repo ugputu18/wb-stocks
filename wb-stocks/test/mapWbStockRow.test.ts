@@ -16,8 +16,11 @@ describe("mapWbStockRow", () => {
       inWayFromClient: 0,
       quantityFull: 34,
       techSize: "0",
-      category: "ignored",
+      category: "Пустышки",
+      subject: "Соска пустышка",
+      brand: "lovi",
       Price: 185,
+      Discount: 20,
     };
 
     const result = mapWbStockRow(raw, snapshotAt);
@@ -35,6 +38,18 @@ describe("mapWbStockRow", () => {
       inWayFromClient: 0,
       quantityFull: 34,
       lastChangeDate: "2023-07-05T11:13:35",
+    });
+    expect(result.catalogRecord).toEqual({
+      nmId: 1439871458,
+      techSize: "0",
+      vendorCode: "443284",
+      category: "Пустышки",
+      subject: "Соска пустышка",
+      brand: "lovi",
+      price: 185,
+      discount: 20,
+      salePrice: 148,
+      updatedAt: snapshotAt,
     });
   });
 
@@ -78,6 +93,26 @@ describe("mapWbStockRow", () => {
     expect(result.record.vendorCode).toBeNull();
     expect(result.record.barcode).toBeNull();
     expect(result.record.techSize).toBeNull();
+    expect(result.catalogRecord.techSize).toBe("");
+    expect(result.catalogRecord.vendorCode).toBeNull();
+    expect(result.catalogRecord.salePrice).toBeNull();
+  });
+
+  it("treats missing Discount as zero when Price exists", () => {
+    const result = mapWbStockRow(
+      {
+        warehouseName: "Коледино",
+        nmId: 7,
+        quantity: 1,
+        Price: 99,
+      },
+      snapshotAt,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.catalogRecord.price).toBe(99);
+    expect(result.catalogRecord.discount).toBe(0);
+    expect(result.catalogRecord.salePrice).toBe(99);
   });
 
   it("rejects rows missing required fields without throwing", () => {

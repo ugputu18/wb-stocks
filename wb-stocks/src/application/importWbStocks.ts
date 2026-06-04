@@ -1,11 +1,13 @@
 import type { Logger } from "pino";
 import type { WbStatsClient } from "../infra/wbStatsClient.js";
 import type { StockSnapshotRepository } from "../infra/stockSnapshotRepository.js";
+import type { WbProductCatalogRepository } from "../infra/wbProductCatalogRepository.js";
 import { mapWbStockRow } from "./mapWbStockRow.js";
 
 export interface ImportWbStocksDeps {
   wbClient: WbStatsClient;
   repository: StockSnapshotRepository;
+  productCatalogRepository?: WbProductCatalogRepository;
   logger: Logger;
   /** Override for tests; defaults to () => new Date(). */
   now?: () => Date;
@@ -25,6 +27,7 @@ export interface ImportWbStocksResult {
   mapped: number;
   skipped: number;
   inserted: number;
+  catalogUpserted: number;
   durationMs: number;
 }
 
@@ -42,7 +45,7 @@ export async function importWbStocks(
   deps: ImportWbStocksDeps,
   options: ImportWbStocksOptions = {},
 ): Promise<ImportWbStocksResult> {
-  const { wbClient, repository, logger } = deps;
+  const { wbClient, repository, productCatalogRepository, logger } = deps;
   const now = deps.now ?? (() => new Date());
 
   const snapshotAt = now().toISOString();
@@ -59,10 +62,12 @@ export async function importWbStocks(
   );
 
   const records = [];
+  const catalogRecords = [];
   let skipped = 0;
   for (const result of mapped) {
     if (result.ok) {
       records.push(result.record);
+      catalogRecords.push(result.catalogRecord);
     } else {
       skipped += 1;
       logger.warn(
@@ -73,6 +78,9 @@ export async function importWbStocks(
   }
 
   const { inserted } = repository.saveBatch(records);
+  const catalogUpserted = productCatalogRepository
+    ? productCatalogRepository.upsertBatch(catalogRecords).upserted
+    : 0;
   const durationMs = Date.now() - startedAt;
 
   logger.info(
@@ -82,6 +90,7 @@ export async function importWbStocks(
       mapped: records.length,
       skipped,
       inserted,
+      catalogUpserted,
       durationMs,
     },
     "WB stocks import: done",
@@ -93,6 +102,7 @@ export async function importWbStocks(
     mapped: records.length,
     skipped,
     inserted,
+    catalogUpserted,
     durationMs,
   };
 }

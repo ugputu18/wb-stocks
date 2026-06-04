@@ -18,6 +18,7 @@ import {
 } from "../domain/wbWarehouseMacroRegion.js";
 import { normalizeWarehouseName } from "../domain/warehouseName.js";
 import type { ForecastRiskBucket } from "../domain/forecastRiskBucket.js";
+import type { WbProductCatalogRecord } from "../domain/stockSnapshot.js";
 import type { RiskStockoutFilter } from "./forecast-report/forecastReportTypes.js";
 import {
   aggregatedRiskStockoutMatches,
@@ -48,6 +49,10 @@ export interface RegionalStocksReportRow {
   nmId: number;
   techSize: string;
   vendorCode: string | null;
+  category: string | null;
+  subject: string | null;
+  brand: string | null;
+  productName: string | null;
   risk: ForecastRiskBucket;
   regionalStartStock: number;
   regionalIncomingUnits: number;
@@ -76,6 +81,8 @@ export interface RegionalStocksReportRow {
    * floor(ownWarehouseStock / unitsPerBox)) * unitsPerBox`.
    */
   recommendedOrderQty: number;
+  salePrice: number | null;
+  projectedRevenue: number;
   stockSnapshotAtMin: string | null;
 }
 
@@ -92,6 +99,8 @@ export interface RegionalStocksReportSummary {
   recommendedToRegionTotal: number;
   ownWarehouseStockTotal: number;
   recommendedOrderQtyTotal: number;
+  salePriceWeightedAvg: number | null;
+  projectedRevenueTotal: number;
 }
 
 export interface RegionalStocksReport {
@@ -124,6 +133,8 @@ export interface BuildRegionalStocksReportInput {
   ownStockByVendor?: ReadonlyMap<string, number>;
   /** vendorCode → units per box. Missing or invalid values are treated as 1. */
   unitsPerBoxByVendor?: ReadonlyMap<string, number>;
+  /** skuKey(nmId, techSize) → product metadata from the latest WB stocks payload. */
+  productCatalogBySku?: ReadonlyMap<string, WbProductCatalogRecord>;
   /**
    * Identifier of the own warehouse that {@link ownStockByVendor} was
    * loaded for. Echoed into the report so that consumers (UI, CSV) can
@@ -163,7 +174,11 @@ function matchesSearch(row: RegionalStocksReportRow, q: string | null | undefine
   if (!needle) return true;
   return (
     String(row.nmId).includes(needle) ||
-    (row.vendorCode ?? "").toLocaleLowerCase("ru").includes(needle)
+    (row.vendorCode ?? "").toLocaleLowerCase("ru").includes(needle) ||
+    (row.brand ?? "").toLocaleLowerCase("ru").includes(needle) ||
+    (row.subject ?? "").toLocaleLowerCase("ru").includes(needle) ||
+    (row.category ?? "").toLocaleLowerCase("ru").includes(needle) ||
+    (row.productName ?? "").toLocaleLowerCase("ru").includes(needle)
   );
 }
 
@@ -179,17 +194,32 @@ function buildSummary(
     recommendedToRegionTotal: 0,
     ownWarehouseStockTotal: 0,
     recommendedOrderQtyTotal: 0,
+    salePriceWeightedAvg: null,
+    projectedRevenueTotal: 0,
   };
+  let pricedProjectedConsumptionTotal = 0;
   for (const r of rows) {
+    const projectedConsumption = r.regionalForecastDailyDemand * consumptionDays;
     summary.risk[r.risk] += 1;
     summary.wbAvailableTotal += r.regionalStartStock + r.regionalIncomingUnits;
-    summary.wbProjectedConsumptionTotal +=
-      r.regionalForecastDailyDemand * consumptionDays;
+    summary.wbProjectedConsumptionTotal += projectedConsumption;
     summary.recommendedToRegionTotal += r.recommendedToRegion;
     summary.ownWarehouseStockTotal += r.ownWarehouseStock;
     summary.recommendedOrderQtyTotal += r.recommendedOrderQty;
+    summary.projectedRevenueTotal += r.projectedRevenue;
+    if (r.salePrice !== null && projectedConsumption > 0) {
+      pricedProjectedConsumptionTotal += projectedConsumption;
+    }
+  }
+  if (pricedProjectedConsumptionTotal > 0) {
+    summary.salePriceWeightedAvg =
+      summary.projectedRevenueTotal / pricedProjectedConsumptionTotal;
   }
   return summary;
+}
+
+function productNameFor(catalog: WbProductCatalogRecord | undefined): string | null {
+  return catalog?.subject ?? catalog?.category ?? null;
 }
 
 function ownWarehouseStockForVendor(
@@ -307,6 +337,17 @@ export function buildRegionalStocksReport(
       vendorCode,
       input.ownStockByVendor,
     );
+    const catalog = input.productCatalogBySku?.get(key);
+    const salePrice =
+      catalog?.salePrice !== undefined &&
+      catalog.salePrice !== null &&
+      Number.isFinite(catalog.salePrice)
+        ? catalog.salePrice
+        : null;
+    const projectedConsumption =
+      regionalForecastDailyDemand * input.targetCoverageDays;
+    const projectedRevenue =
+      salePrice === null ? 0 : projectedConsumption * salePrice;
     const unitsPerBox = unitsPerBoxForVendor(
       vendorCode,
       input.unitsPerBoxByVendor,
@@ -341,6 +382,10 @@ export function buildRegionalStocksReport(
       nmId,
       techSize,
       vendorCode,
+      category: catalog?.category ?? null,
+      subject: catalog?.subject ?? null,
+      brand: catalog?.brand ?? null,
+      productName: productNameFor(catalog),
       risk,
       regionalStartStock,
       regionalIncomingUnits,
@@ -356,6 +401,8 @@ export function buildRegionalStocksReport(
       unitsPerBox,
       ownWarehouseStock,
       recommendedOrderQty,
+      salePrice,
+      projectedRevenue,
       stockSnapshotAtMin: s?.stockSnapshotAtMin ?? null,
     });
   }

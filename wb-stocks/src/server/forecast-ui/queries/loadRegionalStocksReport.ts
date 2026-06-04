@@ -17,9 +17,11 @@ import type { DbHandle } from "../../../infra/db.js";
 import type { Logger } from "../../../logger.js";
 import { OwnStockSnapshotRepository } from "../../../infra/ownStockSnapshotRepository.js";
 import { ProductQuantRepository } from "../../../infra/productQuantRepository.js";
+import { WbProductCatalogRepository } from "../../../infra/wbProductCatalogRepository.js";
 import { WbRegionMacroRegionRepository } from "../../../infra/wbRegionMacroRegionRepository.js";
 import { WbSupplyRepository } from "../../../infra/wbSupplyRepository.js";
 import type { RegionalStocksQuery } from "../parse/forecastQuery.js";
+import { skuKey } from "../../../application/forecast-report/forecastReportQueryHelpers.js";
 
 function addDaysYmd(ymd: string, days: number): string {
   const utcMs = Date.UTC(
@@ -228,6 +230,22 @@ export function loadRegionalStocksReport(
     deps.db,
   ).quantitiesByVendorLatest(q.ownWarehouseCode);
   const unitsPerBoxByVendor = new ProductQuantRepository(deps.db).allByVendor();
+  const productCatalog = new WbProductCatalogRepository(deps.db).getBySkuKeys([
+    ...stockRowsWithIncoming.map((row) => ({
+      nmId: row.nmId,
+      techSize: row.techSize ?? "",
+    })),
+    ...demandRows.map((row) => ({
+      nmId: row.nmId,
+      techSize: row.techSize ?? "",
+    })),
+  ]);
+  const productCatalogBySku = new Map(
+    Array.from(productCatalog.values(), (row) => [
+      skuKey(row.nmId, row.techSize),
+      row,
+    ]),
+  );
 
   const report = buildRegionalStocksReport({
     snapshotDate,
@@ -243,6 +261,7 @@ export function loadRegionalStocksReport(
     regionMacroLookup: buildRegionMacroLookup(macroRepo.getAll()),
     ownStockByVendor,
     unitsPerBoxByVendor,
+    productCatalogBySku,
     ownWarehouseCode: q.ownWarehouseCode,
   });
   return { ok: true, report };

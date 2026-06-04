@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { openDatabase } from "../src/infra/db.js";
 import { StockSnapshotRepository } from "../src/infra/stockSnapshotRepository.js";
+import {
+  catalogKey,
+  WbProductCatalogRepository,
+} from "../src/infra/wbProductCatalogRepository.js";
 import { importWbStocks } from "../src/application/importWbStocks.js";
 import type { WbStatsClient } from "../src/infra/wbStatsClient.js";
 
@@ -24,10 +28,12 @@ function fakeWbClient(rows: unknown[]): WbStatsClient {
 
 describe("importWbStocks use case", () => {
   let repo: StockSnapshotRepository;
+  let productCatalogRepo: WbProductCatalogRepository;
 
   beforeEach(() => {
     const db = openDatabase(":memory:");
     repo = new StockSnapshotRepository(db);
+    productCatalogRepo = new WbProductCatalogRepository(db);
   });
 
   it("maps and stores rows, reporting counts", async () => {
@@ -138,6 +144,43 @@ describe("importWbStocks use case", () => {
     );
     expect(client.getSupplierStocks).toHaveBeenCalledWith({
       dateFrom: "2025-01-01",
+    });
+  });
+
+  it("updates the product catalog from valid stock rows", async () => {
+    const result = await importWbStocks({
+      wbClient: fakeWbClient([
+        {
+          warehouseName: "Коледино",
+          supplierArticle: "35/368_gre",
+          nmId: 507833572,
+          quantity: 3,
+          techSize: "0",
+          category: "Поильники",
+          subject: "Умный поильник Genius",
+          brand: "lovi",
+          Price: 1000,
+          Discount: 15,
+        },
+      ]),
+      repository: repo,
+      productCatalogRepository: productCatalogRepo,
+      logger: silentLogger(),
+      now: () => new Date("2026-04-17T10:00:00.000Z"),
+    });
+
+    expect(result.catalogUpserted).toBe(1);
+    const catalog = productCatalogRepo.getBySkuKeys([
+      { nmId: 507833572, techSize: "0" },
+    ]);
+    expect(catalog.get(catalogKey(507833572, "0"))).toMatchObject({
+      vendorCode: "35/368_gre",
+      category: "Поильники",
+      subject: "Умный поильник Genius",
+      brand: "lovi",
+      price: 1000,
+      discount: 15,
+      salePrice: 850,
     });
   });
 });

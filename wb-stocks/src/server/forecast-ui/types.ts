@@ -4,6 +4,7 @@ import type { WbOrdersDailyRepository } from "../../infra/wbOrdersDailyRepositor
 import type { WbOrdersDailyByRegionRepository } from "../../infra/wbOrdersDailyByRegionRepository.js";
 import type { WbRegionDemandSnapshotRepository } from "../../infra/wbRegionDemandSnapshotRepository.js";
 import type { StockSnapshotRepository } from "../../infra/stockSnapshotRepository.js";
+import type { WbProductCatalogRepository } from "../../infra/wbProductCatalogRepository.js";
 import type { OwnStockSnapshotRepository } from "../../infra/ownStockSnapshotRepository.js";
 import type { WbSupplyRepository } from "../../infra/wbSupplyRepository.js";
 import type {
@@ -29,6 +30,7 @@ export interface ForecastMvpDeps {
   demandRepository: WbDemandSnapshotRepository;
   regionDemandRepository: WbRegionDemandSnapshotRepository;
   stockRepository: StockSnapshotRepository;
+  productCatalogRepository?: WbProductCatalogRepository;
   ownStockRepository?: OwnStockSnapshotRepository;
   supplyRepository: WbSupplyRepository;
   forecastRepository: WbForecastSnapshotRepository;

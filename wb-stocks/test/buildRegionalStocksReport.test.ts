@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildRegionalStocksReport } from "../src/application/buildRegionalStocksReport.js";
+import { skuKey } from "../src/application/forecast-report/forecastReportQueryHelpers.js";
 import { buildRegionMacroLookup } from "../src/domain/wbRegionMacroRegion.js";
 
 const lookup = buildRegionMacroLookup([
@@ -474,5 +475,137 @@ describe("buildRegionalStocksReport", () => {
     expect(out.summary.totalRows).toBe(1);
     expect(out.rows).toHaveLength(1);
     expect(out.rows[0]!.nmId).toBe(4);
+  });
+
+  it("matches search by brand and recalculates revenue summary after filtering", () => {
+    const out = buildRegionalStocksReport({
+      snapshotDate: "2026-04-18",
+      horizonDays: 30,
+      macroRegion: "Центральный",
+      targetCoverageDays: 10,
+      q: "lovi",
+      stockRows: [
+        {
+          warehouseKey: "коледино",
+          nmId: 100,
+          techSize: "0",
+          vendorCode: "LOVI-1",
+          startStock: 10,
+          incomingUnits: 0,
+          stockSnapshotAt: "2026-04-18T00:00:00Z",
+        },
+        {
+          warehouseKey: "коледино",
+          nmId: 200,
+          techSize: "0",
+          vendorCode: "CANPOL-1",
+          startStock: 10,
+          incomingUnits: 0,
+          stockSnapshotAt: "2026-04-18T00:00:00Z",
+        },
+      ],
+      demandRows: [
+        {
+          regionKey: "buyer-central",
+          nmId: 100,
+          techSize: "0",
+          vendorCode: "LOVI-1",
+          regionalForecastDailyDemand: 2,
+        },
+        {
+          regionKey: "buyer-central",
+          nmId: 200,
+          techSize: "0",
+          vendorCode: "CANPOL-1",
+          regionalForecastDailyDemand: 3,
+        },
+      ],
+      productCatalogBySku: new Map([
+        [
+          skuKey(100, "0"),
+          {
+            nmId: 100,
+            techSize: "0",
+            vendorCode: "LOVI-1",
+            category: "Поильники",
+            subject: "Умный поильник",
+            brand: "lovi",
+            price: 100,
+            discount: 0,
+            salePrice: 100,
+            updatedAt: "2026-04-18T00:00:00Z",
+          },
+        ],
+        [
+          skuKey(200, "0"),
+          {
+            nmId: 200,
+            techSize: "0",
+            vendorCode: "CANPOL-1",
+            category: "Бутылочки",
+            subject: "Бутылочка",
+            brand: "Canpol babies",
+            price: 1000,
+            discount: 0,
+            salePrice: 1000,
+            updatedAt: "2026-04-18T00:00:00Z",
+          },
+        ],
+      ]),
+      regionMacroLookup: lookup,
+    });
+
+    expect(out.rows).toHaveLength(1);
+    expect(out.rows[0]!.nmId).toBe(100);
+    expect(out.rows[0]!.brand).toBe("lovi");
+    expect(out.rows[0]!.productName).toBe("Умный поильник");
+    expect(out.rows[0]!.projectedRevenue).toBe(2000);
+    expect(out.summary.totalRows).toBe(1);
+    expect(out.summary.wbProjectedConsumptionTotal).toBe(20);
+    expect(out.summary.projectedRevenueTotal).toBe(2000);
+    expect(out.summary.salePriceWeightedAvg).toBe(100);
+  });
+
+  it("matches search by subject or category", () => {
+    const out = buildRegionalStocksReport({
+      snapshotDate: "2026-04-18",
+      horizonDays: 30,
+      macroRegion: "Центральный",
+      targetCoverageDays: 10,
+      q: "пустыш",
+      stockRows: [],
+      demandRows: [
+        {
+          regionKey: "buyer-central",
+          nmId: 300,
+          techSize: "",
+          vendorCode: "PACIFIER",
+          regionalForecastDailyDemand: 1,
+        },
+      ],
+      productCatalogBySku: new Map([
+        [
+          skuKey(300, ""),
+          {
+            nmId: 300,
+            techSize: "",
+            vendorCode: "PACIFIER",
+            category: "Пустышки",
+            subject: null,
+            brand: "Canpol babies",
+            price: null,
+            discount: null,
+            salePrice: null,
+            updatedAt: "2026-04-18T00:00:00Z",
+          },
+        ],
+      ]),
+      regionMacroLookup: lookup,
+    });
+
+    expect(out.rows).toHaveLength(1);
+    expect(out.rows[0]!.productName).toBe("Пустышки");
+    expect(out.summary.projectedRevenueTotal).toBe(0);
+    expect(out.summary.salePriceWeightedAvg).toBeNull();
   });
 });

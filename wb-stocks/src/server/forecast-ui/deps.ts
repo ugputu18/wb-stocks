@@ -3,6 +3,7 @@ import { WbOrdersDailyByRegionRepository } from "../../infra/wbOrdersDailyByRegi
 import { WbDemandSnapshotRepository } from "../../infra/wbDemandSnapshotRepository.js";
 import { WbRegionDemandSnapshotRepository } from "../../infra/wbRegionDemandSnapshotRepository.js";
 import { StockSnapshotRepository } from "../../infra/stockSnapshotRepository.js";
+import { WbProductCatalogRepository } from "../../infra/wbProductCatalogRepository.js";
 import { OwnStockSnapshotRepository } from "../../infra/ownStockSnapshotRepository.js";
 import { WbSupplyRepository } from "../../infra/wbSupplyRepository.js";
 import {
@@ -42,6 +43,7 @@ export function buildMvpDeps(ctx: ForecastUiServerCtx): ForecastMvpDeps {
     demandRepository: new WbDemandSnapshotRepository(db),
     regionDemandRepository: new WbRegionDemandSnapshotRepository(db),
     stockRepository: new StockSnapshotRepository(db),
+    productCatalogRepository: new WbProductCatalogRepository(db),
     ownStockRepository: new OwnStockSnapshotRepository(db),
     supplyRepository: new WbSupplyRepository(db),
     forecastRepository: new WbForecastSnapshotRepository(db),

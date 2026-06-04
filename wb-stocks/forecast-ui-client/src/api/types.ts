@@ -158,11 +158,17 @@ export interface RegionalStocksResponse {
     recommendedToRegionTotal: number;
     ownWarehouseStockTotal: number;
     recommendedOrderQtyTotal: number;
+    salePriceWeightedAvg: number | null;
+    projectedRevenueTotal: number;
   };
   rows: Array<{
     nmId: number;
     techSize: string;
     vendorCode: string | null;
+    category: string | null;
+    subject: string | null;
+    brand: string | null;
+    productName: string | null;
     risk: "critical" | "warning" | "attention" | "ok";
     regionalStartStock: number;
     regionalIncomingUnits: number;
@@ -178,6 +184,10 @@ export interface RegionalStocksResponse {
     ownWarehouseStock: number;
     /** «Заказ» = целые короба, не больше доступного склада. */
     recommendedOrderQty: number;
+    /** Текущая цена продажи из WB stocks (`Price` с учетом `Discount`). */
+    salePrice: number | null;
+    /** Прогнозная выручка на целевое покрытие по текущей цене продажи. */
+    projectedRevenue: number;
     stockSnapshotAtMin: string | null;
   }>;
 }

@@ -3,6 +3,7 @@ import { logger } from "../logger.js";
 import { WbStatsClient } from "../infra/wbStatsClient.js";
 import { openDatabase } from "../infra/db.js";
 import { StockSnapshotRepository } from "../infra/stockSnapshotRepository.js";
+import { WbProductCatalogRepository } from "../infra/wbProductCatalogRepository.js";
 import { importWbStocks } from "../application/importWbStocks.js";
 
 async function main(): Promise<void> {
@@ -19,9 +20,15 @@ async function main(): Promise<void> {
 
   const db = openDatabase(cfg.DATABASE_PATH);
   const repository = new StockSnapshotRepository(db);
+  const productCatalogRepository = new WbProductCatalogRepository(db);
 
   try {
-    const result = await importWbStocks({ wbClient, repository, logger });
+    const result = await importWbStocks({
+      wbClient,
+      repository,
+      productCatalogRepository,
+      logger,
+    });
     logger.info(result, "WB stocks import finished");
     console.log(JSON.stringify(result, null, 2));
   } finally {

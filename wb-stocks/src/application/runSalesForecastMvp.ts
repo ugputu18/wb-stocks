@@ -6,6 +6,7 @@ import type { WbOrdersDailyByRegionRepository } from "../infra/wbOrdersDailyByRe
 import type { WbDemandSnapshotRepository } from "../infra/wbDemandSnapshotRepository.js";
 import type { WbRegionDemandSnapshotRepository } from "../infra/wbRegionDemandSnapshotRepository.js";
 import type { StockSnapshotRepository } from "../infra/stockSnapshotRepository.js";
+import type { WbProductCatalogRepository } from "../infra/wbProductCatalogRepository.js";
 import type { OwnStockSnapshotRepository } from "../infra/ownStockSnapshotRepository.js";
 import type { WbSupplyRepository } from "../infra/wbSupplyRepository.js";
 import type { WbForecastSnapshotRepository } from "../infra/wbForecastSnapshotRepository.js";
@@ -44,6 +45,7 @@ export interface RunSalesForecastMvpDeps {
   demandRepository: WbDemandSnapshotRepository;
   regionDemandRepository: WbRegionDemandSnapshotRepository;
   stockRepository: StockSnapshotRepository;
+  productCatalogRepository?: WbProductCatalogRepository;
   ownStockRepository?: OwnStockSnapshotRepository;
   supplyRepository: WbSupplyRepository;
   forecastRepository: WbForecastSnapshotRepository;
@@ -146,6 +148,7 @@ export async function runSalesForecastMvp(
     demandRepository,
     regionDemandRepository,
     stockRepository,
+    productCatalogRepository,
     ownStockRepository,
     supplyRepository,
     forecastRepository,
@@ -195,6 +198,7 @@ export async function runSalesForecastMvp(
         {
           wbClient,
           repository: stockRepository,
+          productCatalogRepository,
           logger,
           now,
         },
